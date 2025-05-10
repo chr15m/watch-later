@@ -89,7 +89,7 @@
   (p/let [encoder (js/TextEncoder.)
           data (.encode encoder url)
           hash-buffer (js/crypto.subtle.digest "SHA-256" data)
-          hash-hex (.join (.map (js/Array.from hash-buffer)
+          hash-hex (.join (.map (js/Array.from (js/Uint8Array. hash-buffer))
                                 #(-> %
                                      (.toString 16)
                                      (.padStart 2 "0")))
@@ -110,6 +110,7 @@
         #js {:kind 30078
              :created_at (js/Math.floor (/ (js/Date.now) 1000))
              :tags #js [#js ["d" app-name]
+                        #js ["p" pk]
                         #js ["a" (str "30078:" pk
                                       ":" app-name
                                       ":" hash-fragment)]]
@@ -146,7 +147,7 @@
         sub (.subscribeMany pool
                             (clj->js relays)
                             (clj->js [{:kinds [30078]
-                                       :#p [pk]
+                                       :authors [pk]
                                        :#d [app-name]}])
                             (clj->js {:onevent handle-event}))]
     sub))
