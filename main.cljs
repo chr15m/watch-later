@@ -1,5 +1,6 @@
 (ns main
-  {:clj-kondo/config '{:lint-as {promesa.core/let clojure.core/let}}}
+  {:clj-kondo/config
+   '{:lint-as {promesa.core/let clojure.core/let}}}
   (:require
     [reagent.core :as r]
     [reagent.dom :as rdom]
@@ -13,6 +14,9 @@
   "https://cdn.jsdelivr.net/npm/@tabler/icons@3.31.0/icons/")
 (def localstorage-key
   "watch-later-nostr-key")
+
+; TODO:
+; - cache stored events and only request since last posted
 
 ;; State management
 (defonce state (r/atom {:loading? false
@@ -193,9 +197,7 @@
 
 (defn video-item [{:keys [url viewed event metadata]}]
   (let [youtube-id (get-youtube-id url)
-        thumbnail-url (if (and metadata (:thumbnail_url metadata))
-                        (:thumbnail_url metadata)
-                        (get-thumbnail-url youtube-id))
+        thumbnail-url (get-thumbnail-url youtube-id)
         title (if (and metadata (:title metadata))
                 (:title metadata)
                 "YouTube Video")]
