@@ -374,7 +374,11 @@
                [loading-spinner])
              
              [:div.videos-list
-              (for [video (sort-by (comp not :viewed) (:videos @state))]
+              (for [video (sort-by (fn [video] 
+                                     [(not (:viewed video)) 
+                                      (- (or (get-in video
+                                                     [:event :created_at]) 0))])
+                                   (:videos @state))]
                 ^{:key (:url video)}
                 [video-item video])]])])})))
 
