@@ -78,14 +78,12 @@
 (defn fetch-youtube-metadata [youtube-id]
   (p/catch
     (p/let [url (oembed-meta-url youtube-id)
-            _ (js/console.log "fetch-youtube-metadata" url)
             response (js/fetch url)
             json (.json response)]
       (js->clj json :keywordize-keys true))
     js/console.error))
 
 (defn encrypt-content [sk pk content]
-  (js/console.log "encrypt-content" sk pk content)
   (js/NostrTools.nip04.encrypt sk pk (js/JSON.stringify (clj->js content))))
 
 (defn decrypt-content [sk pk encrypted-content]
@@ -97,7 +95,6 @@
       nil)))
 
 (defn hash-url [url]
-  (js/console.log "hash-url" url)
   (p/let [encoder (js/TextEncoder.)
           data (.encode encoder url)
           hash-buffer (js/crypto.subtle.digest "SHA-256" data)
@@ -106,7 +103,6 @@
                                      (.toString 16)
                                      (.padStart 2 "0")))
                           "")]
-    (js/console.log "hash-hex" hash-hex)
     (.substr hash-hex 0 8)))
 
 (defn create-event [sk pk url viewed hash-fragment metadata]
@@ -116,29 +112,32 @@
                  :useragent (.-userAgent js/navigator)
                  :viewed viewed
                  :metadata metadata}
-        _ (js/console.log "content" content)
         encrypted-content (encrypt-content sk pk content)
-        _ (js/console.log "encrypted-content" encrypted-content)
         event-template
         #js {:kind nostr-kind
              :created_at (js/Math.floor (/ (js/Date.now) 1000))
              :tags #js [#js ["d" (str app-name ":" uuid)]
+                        #js ["a" (str "30078:"
+                                      pk ":"
+                                      app-name ":" uuid)]
                         #js ["n" app-name]]
              :content encrypted-content}]
     (js/console.log "event-template" event-template)
+    (js/console.log "content" (clj->js content))
     (js/NostrTools.finalizeEvent event-template sk)))
 
 (defn publish-event [event relays]
   (js/console.log "publish-event" event relays)
   (p/let [pool (js/NostrTools.SimplePool.)
           published (js/Promise.any (.publish pool (clj->js relays) event))]
-    (js/console.log "Published event:" event)
     published))
 
 (defn handle-event [event]
   (js/console.log "handle-event" event)
+  (js/console.log "id:" (aget event "id"))
   (let [sk (generate-or-load-keys)
         decrypted (decrypt-content sk (pubkey sk) (.-content event))]
+    (js/console.log "handle-event decrypted content" (clj->js decrypted))
     (when decrypted
       (swap! state update :videos
              (fn [videos]
@@ -203,6 +202,7 @@
   [:div.loader])
 
 (defn video-item [{:keys [url viewed event metadata]}]
+  (js/console.log "video-item render" url viewed)
   (let [youtube-id (get-youtube-id url)
         thumbnail-url (get-thumbnail-url youtube-id)
         title (if (and metadata (:title metadata))
@@ -234,15 +234,11 @@
           (let [sk (generate-or-load-keys)
                 youtube-id (get-youtube-id pasted-text)]
             (swap! state assoc :loading? true)
-            (js/console.log "creating event")
             (p/let [hash-fragment (hash-url pasted-text)
-                    _ (js/console.log "hash-fragment")
                     metadata (fetch-youtube-metadata youtube-id)
-                    _ (js/console.log "metadata" (clj->js metadata))
                     event (create-event
                             sk (pubkey sk)
                             pasted-text false hash-fragment metadata)
-                    _ (js/console.log "create-event" event)
                     published (publish-event event (:relays @state))]
               (js/console.log "published" published)
               (reset! input-value "")
@@ -364,7 +360,6 @@
        :reagent-render
        (fn []
          [:main
-          [:p [icon (load-icon "outline/settings.svg")]]
           [:div.app-header
            [:h1 "Watch Later"]
            [:button.icon-button
@@ -384,13 +379,14 @@
                [loading-spinner])
 
              [:div.videos-list
-              (for [video (sort-by (fn [video]
-                                     [(not (:viewed video))
-                                      (or (get-in video
-                                                     [:event :created_at]) 0)])
-                                   (:videos @state))]
-                ^{:key (:url video)}
-                [video-item video])]])])})))
+              (doall
+                (for [video (sort-by (fn [video]
+                                       [(:viewed video)
+                                        (or (get-in video
+                                                    [:event :created_at]) 0)])
+                                     (:videos @state))]
+                  ^{:key (:url video)}
+                  [video-item video]))]])])})))
 
 (js/console.log
   (->
