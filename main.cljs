@@ -116,8 +116,7 @@
         #js {:kind nostr-kind
              :created_at (js/Math.floor (/ (js/Date.now) 1000))
              :tags #js [#js ["d" (str app-name ":" uuid)]
-                        #js ["n" app-name]
-                        #js ["p" pk]]
+                        #js ["n" app-name]]
              :content encrypted-content}]
     (js/console.log "event-template" event-template)
     (js/NostrTools.finalizeEvent event-template sk)))
