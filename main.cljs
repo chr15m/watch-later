@@ -105,10 +105,12 @@
                           "")]
     (.substr hash-hex 0 8)))
 
-(defn create-event [sk pk url viewed hash-fragment metadata]
-  (js/console.log "create-event" sk pk url viewed hash-fragment metadata)
-  (let [uuid (str (random-uuid))
-        content {:url url
+(defn create-event [sk pk url viewed hash-fragment metadata & [existing-uuid]]
+  (js/console.log "create-event"
+                  sk pk url viewed hash-fragment metadata existing-uuid)
+  (let [uuid (or existing-uuid (str (random-uuid)))
+        content {:uuid uuid
+                 :url url
                  :useragent (.-userAgent js/navigator)
                  :viewed viewed
                  :metadata metadata}
@@ -117,9 +119,6 @@
         #js {:kind nostr-kind
              :created_at (js/Math.floor (/ (js/Date.now) 1000))
              :tags #js [#js ["d" (str app-name ":" uuid)]
-                        #js ["a" (str "30078:"
-                                      pk ":"
-                                      app-name ":" uuid)]
                         #js ["n" app-name]]
              :content encrypted-content}]
     (js/console.log "event-template" event-template)
@@ -165,12 +164,13 @@
 (defn toggle-viewed [video]
   (swap! state assoc :loading? true)
   (let [sk (generate-or-load-keys)
+        uuid (:uuid video)
         url (:url video)
         new-viewed (not (:viewed video))
         metadata (:metadata video)]
     (p/let [hash-fragment (hash-url url)
             event (create-event sk (pubkey sk)
-                                url new-viewed hash-fragment metadata)]
+                                url new-viewed hash-fragment metadata uuid)]
       (publish-event event (:relays @state))
       (swap! state assoc :loading? false))))
 
@@ -201,7 +201,7 @@
 (defn loading-spinner []
   [:div.loader])
 
-(defn video-item [{:keys [url viewed event metadata]}]
+(defn video-item [{:keys [url viewed uuid event metadata]}]
   (js/console.log "video-item render" url viewed)
   (let [youtube-id (get-youtube-id url)
         thumbnail-url (get-thumbnail-url youtube-id)
@@ -217,6 +217,7 @@
       [:button.icon-button
        {:on-click #(toggle-viewed {:url url
                                    :viewed viewed
+                                   :uuid uuid
                                    :event event
                                    :metadata metadata})
         :alt (if viewed "Viewed" "Mark as viewed")}
@@ -382,8 +383,8 @@
               (doall
                 (for [video (sort-by (fn [video]
                                        [(:viewed video)
-                                        (or (get-in video
-                                                    [:event :created_at]) 0)])
+                                        (* -1 (aget (:event video)
+                                                    "created_at"))])
                                      (:videos @state))]
                   ^{:key (:url video)}
                   [video-item video]))]])])})))
