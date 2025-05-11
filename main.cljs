@@ -70,7 +70,7 @@
 
 (defn fetch-youtube-metadata [youtube-id]
   (p/catch
-    (p/let [url (oembed-meta-url youtube-id) 
+    (p/let [url (oembed-meta-url youtube-id)
             _ (js/console.log "fetch-youtube-metadata" url)
             response (js/fetch url)
             json (.json response)]
@@ -136,9 +136,9 @@
       (swap! state update :videos
              (fn [videos]
                (let [existing-index
-                     (first (keep-indexed 
-                              (fn [idx v] 
-                                (when (= (:url v) (:url decrypted)) idx)) 
+                     (first (keep-indexed
+                              (fn [idx v]
+                                (when (= (:url v) (:url decrypted)) idx))
                               videos))]
                  (if existing-index
                    (assoc-in videos [existing-index]
@@ -207,7 +207,7 @@
        [:img.thumbnail {:src thumbnail-url :alt "Video thumbnail"}]
        [:div.video-title title]]]
      [:div.video-controls
-      [:button.icon-button 
+      [:button.icon-button
        {:on-click #(toggle-viewed {:url url
                                    :viewed viewed
                                    :event event
@@ -260,7 +260,7 @@
             nsec (js/NostrTools.nip19.nsecEncode sk)]
         [:div.settings-panel
          [:h2 "Settings"]
-         
+
          [:div.setting-group
           [:h3 "Relays"]
           (for [[idx relay] (map-indexed vector (:relays @state))]
@@ -270,14 +270,14 @@
                      :on-change #(swap! state assoc-in
                                         [:relays idx]
                                         (.. % -target -value))}])]
-         
+
          [:div.setting-group
           [:h3 "Account"]
           [:button.button
            {:on-click #(do (copy-to-clipboard nsec)
                            (js/alert "nsec copied to clipboard!"))}
            "Copy nsec"]
-          
+
           [:div
            [:input {:type "text"
                     :placeholder "Paste nsec here to import"
@@ -300,7 +300,7 @@
                     (js/console.error "Error importing nsec" e)
                     (js/alert "Invalid nsec format"))))}
             "Import Key"]]]
-         
+
          [:div.setting-group
           [:h3 "Sync to Device"]
           (if @show-qr
@@ -319,11 +319,11 @@
                             (p/let [encrypted-key
                                     (encrypt-key-with-pin nsec @pin-input)]
                               (when encrypted-key
-                                (let [url (str (.-origin js/window.location) 
-                                               (.-pathname js/window.location) 
+                                (let [url (str (.-origin js/window.location)
+                                               (.-pathname js/window.location)
                                                "?key=" encrypted-key)]
                                   (reset! show-qr true)
-                                  (js/setTimeout 
+                                  (js/setTimeout
                                     (fn []
                                       (js/QRCode. "qrcode" #js {:text url
                                                                 :width 256
@@ -352,7 +352,7 @@
        (fn []
          (check-url-params)
          (subscribe-to-events (pubkey sk) (:relays @state)))
-       
+
        :reagent-render
        (fn []
          [:main
@@ -369,13 +369,13 @@
             [settings-panel]
             [:div.content
              [url-input]
-             
+
              (when (:loading? @state)
                [loading-spinner])
-             
+
              [:div.videos-list
               (for [video (sort-by (fn [video]
-                                     [(not (:viewed video)) 
+                                     [(not (:viewed video))
                                       (or (get-in video
                                                      [:event :created_at]) 0)])
                                    (:videos @state))]
