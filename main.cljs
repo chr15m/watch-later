@@ -14,6 +14,7 @@
   "https://cdn.jsdelivr.net/npm/@tabler/icons@3.31.0/icons/")
 (def localstorage-key
   "watch-later-nostr-key")
+(def nostr-kind 30078)
 
 ; TODO:
 ; - cache stored events and only request since last posted
@@ -103,7 +104,8 @@
 
 (defn create-event [sk pk url viewed hash-fragment metadata]
   (js/console.log "create-event" sk pk url viewed hash-fragment metadata)
-  (let [content {:url url
+  (let [uuid (str (random-uuid))
+        content {:url url
                  :useragent (.-userAgent js/navigator)
                  :viewed viewed
                  :metadata metadata}
@@ -111,13 +113,11 @@
         encrypted-content (encrypt-content sk pk content)
         _ (js/console.log "encrypted-content" encrypted-content)
         event-template
-        #js {:kind 30078
+        #js {:kind nostr-kind
              :created_at (js/Math.floor (/ (js/Date.now) 1000))
-             :tags #js [#js ["d" app-name]
-                        #js ["p" pk]
-                        #js ["a" (str "30078:" pk
-                                      ":" app-name
-                                      ":" hash-fragment)]]
+             :tags #js [#js ["d" (str app-name ":" uuid)]
+                        #js ["n" app-name]
+                        #js ["p" pk]]
              :content encrypted-content}]
     (js/console.log "event-template" event-template)
     (js/NostrTools.finalizeEvent event-template sk)))
@@ -130,6 +130,7 @@
     published))
 
 (defn handle-event [event]
+  (js/console.log "handle-event" event)
   (let [sk (generate-or-load-keys)
         decrypted (decrypt-content sk (pubkey sk) (.-content event))]
     (when decrypted
@@ -150,9 +151,9 @@
   (let [pool (js/NostrTools.SimplePool.)
         sub (.subscribeMany pool
                             (clj->js relays)
-                            (clj->js [{:kinds [30078]
+                            (clj->js [{:kinds [nostr-kind]
                                        :authors [pk]
-                                       :#d [app-name]}])
+                                       :#n [app-name]}])
                             (clj->js {:onevent handle-event}))]
     sub))
 
@@ -374,10 +375,10 @@
                [loading-spinner])
              
              [:div.videos-list
-              (for [video (sort-by (fn [video] 
+              (for [video (sort-by (fn [video]
                                      [(not (:viewed video)) 
-                                      (- (or (get-in video
-                                                     [:event :created_at]) 0))])
+                                      (or (get-in video
+                                                     [:event :created_at]) 0)])
                                    (:videos @state))]
                 ^{:key (:url video)}
                 [video-item video])]])])})))
