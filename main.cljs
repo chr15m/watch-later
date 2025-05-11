@@ -1,6 +1,11 @@
 (ns main
   {:clj-kondo/config
    '{:lint-as {promesa.core/let clojure.core/let}}}
+  (:require-macros
+    [iconloader :refer [icon
+                        load-icon
+                        set-svg-base-url
+                        wait-for-preload]])
   (:require
     [reagent.core :as r]
     [reagent.dom :as rdom]
@@ -10,11 +15,13 @@
 (def app-name "cx.mccormick.watchlater")
 (def default-relays ["wss://relay.damus.io"
                      "wss://relay.nostr.band"])
-(def tabler-icons-base-url
+(def icon-url
   "https://cdn.jsdelivr.net/npm/@tabler/icons@3.31.0/icons/")
 (def localstorage-key
   "watch-later-nostr-key")
 (def nostr-kind 30078)
+
+(set-svg-base-url icon-url)
 
 ; TODO:
 ; - cache stored events and only request since last posted
@@ -211,11 +218,12 @@
        {:on-click #(toggle-viewed {:url url
                                    :viewed viewed
                                    :event event
-                                   :metadata metadata})}
-       [:img {:src (if viewed 
-                     (str tabler-icons-base-url "filled/eye.svg")
-                     (str tabler-icons-base-url "outline/eye.svg"))
-              :alt (if viewed "Viewed" "Mark as viewed")}]]]]))
+                                   :metadata metadata})
+        :alt (if viewed "Viewed" "Mark as viewed")}
+       [icon
+        (if viewed
+          (load-icon "filled/eye.svg")
+          (load-icon "outline/eye.svg"))]]]]))
 
 (defn event:pasted-url [state input-value ev]
   (let [pasted-text (.. ev -clipboardData (getData "text"))]
@@ -356,15 +364,17 @@
        :reagent-render
        (fn []
          [:main
+          [:p [icon (load-icon "outline/settings.svg")]]
           [:div.app-header
            [:h1 "Watch Later"]
            [:button.icon-button
-            {:on-click #(swap! state update :settings-open? not)}
-            [:img {:src (if (:settings-open? @state)
-                          (str tabler-icons-base-url "outline/x.svg")
-                          (str tabler-icons-base-url "outline/settings.svg"))
-                   :alt "Settings"}]]]
-          
+            {:on-click #(swap! state update :settings-open? not)
+             :alt "Settings"}
+            [icon
+             (if (:settings-open? @state)
+               (load-icon "outline/x.svg")
+               (load-icon "outline/settings.svg"))]]]
+
           (if (:settings-open? @state)
             [settings-panel]
             [:div.content
@@ -388,4 +398,6 @@
     (pubkey)
     js/NostrTools.nip19.npubEncode))
 
-(rdom/render [app] (.getElementById js/document "app"))
+(p/do!
+  (wait-for-preload)
+  (rdom/render [app] (.getElementById js/document "app")))
