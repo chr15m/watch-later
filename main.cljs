@@ -32,7 +32,8 @@
                         :settings-open? false
                         :relays default-relays
                         :qr-code nil
-                        :pin nil}))
+                        :pin nil
+                        :sk nil}))
 
 ;; Utility functions
 
@@ -257,85 +258,87 @@
                 :on-change #(reset! input-value (.. % -target -value))
                 :on-paste #(event:pasted-url state input-value %)}]])))
 
+(defn component:settings-relays [state]
+  [:div.setting-group
+   [:h3 "Relays"]
+   (for [[idx relay] (map-indexed vector (:relays @state))]
+     ^{:key idx}
+     [:input {:type "text"
+              :value relay
+              :on-change #(swap! state assoc-in
+                                 [:relays idx]
+                                 (.. % -target -value))}])])
+
+(defn component:settings-nsec [_state nsec nsec-input]
+  [:div.setting-group
+   [:h3 "Account"]
+   [:button.button
+    {:on-click #(do (copy-to-clipboard nsec)
+                    (js/alert "nsec copied to clipboard!"))}
+    "Copy nsec"]
+
+   [:div
+    [:input {:type "text"
+             :placeholder "Paste nsec here to import"
+             :value @nsec-input
+             :on-change #(reset! nsec-input (.. % -target -value))}]
+    [:button.button
+     {:on-click
+      #(when
+         (js/confirm "Are you sure you want to replace the private key?")
+         (try
+           (let [decoded (js/NostrTools.nip19.decode @nsec-input)
+                 type (.-type decoded)
+                 data (.-data decoded)]
+             (if (= type "nsec")
+               (do
+                 (set-key data)
+                 (js/window.location.reload))
+               (js/alert "Invalid nsec format")))
+           (catch :default e
+             (js/console.error "Error importing nsec" e)
+             (js/alert "Invalid nsec format"))))}
+     "Import Key"]]])
+
+(defn component:settings-sync [_state nsec pin-input show-qr]
+  [:div.setting-group
+   [:h3 "Sync to Device"]
+   (if @show-qr
+     [:div
+      [:div#qrcode]
+      [:button.button {:on-click
+                       #(reset! show-qr false)}
+       "Hide QR Code"]]
+     [:div
+      [:input {:type "password"
+               :placeholder "Enter PIN for encryption"
+               :value @pin-input
+               :on-change #(reset! pin-input (.. % -target -value))}]
+      [:button.button
+       {:on-click #(when (and @pin-input (not= @pin-input ""))
+                     (p/let [encrypted-key
+                             (encrypt-key-with-pin nsec @pin-input)]
+                       (when encrypted-key
+                         (let [url (str (.-origin js/window.location)
+                                        (.-pathname js/window.location)
+                                        "?key=" encrypted-key)]
+                           (reset! show-qr true)
+                           (js/setTimeout
+                             (fn []
+                               (js/QRCode. "qrcode" #js {:text url
+                                                         :width 256
+                                                         :height 256}))
+                             100)))))}
+       "Generate QR Code"]])])
+
 (defn component:settings-panel [state]
-  (let [nsec-input (r/atom "")
-        pin-input (r/atom "")
-        show-qr (r/atom false)]
-    (fn []
-      (let [sk (generate-or-load-keys)
-            nsec (js/NostrTools.nip19.nsecEncode sk)]
-        [:div.settings-panel
-         [:h2 "Settings"]
-
-         [:div.setting-group
-          [:h3 "Relays"]
-          (for [[idx relay] (map-indexed vector (:relays @state))]
-            ^{:key idx}
-            [:input {:type "text"
-                     :value relay
-                     :on-change #(swap! state assoc-in
-                                        [:relays idx]
-                                        (.. % -target -value))}])]
-
-         [:div.setting-group
-          [:h3 "Account"]
-          [:button.button
-           {:on-click #(do (copy-to-clipboard nsec)
-                           (js/alert "nsec copied to clipboard!"))}
-           "Copy nsec"]
-
-          [:div
-           [:input {:type "text"
-                    :placeholder "Paste nsec here to import"
-                    :value @nsec-input
-                    :on-change #(reset! nsec-input (.. % -target -value))}]
-           [:button.button
-            {:on-click
-             #(when
-                (js/confirm "Are you sure you want to replace the private key?")
-                (try
-                  (let [decoded (js/NostrTools.nip19.decode @nsec-input)
-                        type (.-type decoded)
-                        data (.-data decoded)]
-                    (if (= type "nsec")
-                      (do
-                        (set-key data)
-                        (js/window.location.reload))
-                      (js/alert "Invalid nsec format")))
-                  (catch :default e
-                    (js/console.error "Error importing nsec" e)
-                    (js/alert "Invalid nsec format"))))}
-            "Import Key"]]]
-
-         [:div.setting-group
-          [:h3 "Sync to Device"]
-          (if @show-qr
-            [:div
-             [:div#qrcode]
-             [:button.button {:on-click
-                              #(reset! show-qr false)}
-              "Hide QR Code"]]
-            [:div
-             [:input {:type "password"
-                      :placeholder "Enter PIN for encryption"
-                      :value @pin-input
-                      :on-change #(reset! pin-input (.. % -target -value))}]
-             [:button.button
-              {:on-click #(when (and @pin-input (not= @pin-input ""))
-                            (p/let [encrypted-key
-                                    (encrypt-key-with-pin nsec @pin-input)]
-                              (when encrypted-key
-                                (let [url (str (.-origin js/window.location)
-                                               (.-pathname js/window.location)
-                                               "?key=" encrypted-key)]
-                                  (reset! show-qr true)
-                                  (js/setTimeout
-                                    (fn []
-                                      (js/QRCode. "qrcode" #js {:text url
-                                                                :width 256
-                                                                :height 256}))
-                                    100)))))}
-              "Generate QR Code"]])]]))))
+  (let [sk (generate-or-load-keys)
+        nsec (js/NostrTools.nip19.nsecEncode sk)]
+    [:div.settings-panel
+     [:h2 "Settings"]
+     [component:settings-sync state nsec (r/atom "") (r/atom false)]
+     [component:settings-nsec state nsec (r/atom "")]
+     [component:settings-relays state]]))
 
 (defn check-url-params []
   (let [url-params (js/URLSearchParams. (.-search js/window.location))
@@ -414,6 +417,7 @@
     (-> sk
         (pubkey)
         js/NostrTools.nip19.npubEncode))
+  (swap! state assoc :sk sk)
   (check-url-params)
   (subscribe-to-events (pubkey sk) (:relays @state))
   (wait-for-preload)
