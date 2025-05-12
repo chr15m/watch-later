@@ -442,6 +442,7 @@
          (->> (:videos @state)
               (group-by
                 :viewed)
+              (sort-by first)
               (map second)
               (map
                 #(sort-by
