@@ -257,7 +257,7 @@
                 :on-change #(reset! input-value (.. % -target -value))
                 :on-paste #(event:pasted-url state input-value %)}]])))
 
-(defn settings-panel []
+(defn component:settings-panel [state]
   (let [nsec-input (r/atom "")
         pin-input (r/atom "")
         show-qr (r/atom false)]
@@ -351,71 +351,70 @@
                                          (js/JSON.stringify keys-obj))
                 (js/window.location.reload)))))))))
 
-(defn app []
-  (let [sk (generate-or-load-keys)]
-    (r/create-class
-      {:component-did-mount
-       (fn []
-         (check-url-params)
-         (subscribe-to-events (pubkey sk) (:relays @state)))
+(defn component:header [state]
+  [:header
+   [:nav
+    [:h1
+     [icon (load-icon "filled/brand-youtube.svg")]
+     "Watch Later"]
+    [:button.icon-button
+     {:on-click #(swap! state update :settings-open? not)
+      :alt "Settings"}
+     [icon
+      (if (:settings-open? @state)
+        (load-icon "outline/x.svg")
+        (load-icon "outline/settings.svg"))]]]])
 
-       :reagent-render
-       (fn []
-         [:<>
-          [:header
-           [:nav
-            [:h1
-             [icon (load-icon "filled/brand-youtube.svg")]
-             "Watch Later"]
-            [:button.icon-button
-             {:on-click #(swap! state update :settings-open? not)
-              :alt "Settings"}
-             [icon
-              (if (:settings-open? @state)
-                (load-icon "outline/x.svg")
-                (load-icon "outline/settings.svg"))]]]]
-          [:main
-           (if (:settings-open? @state)
-             [settings-panel]
-             [:div.content
-              [url-input]
+(defn component:main-view [state]
+  [:div.content
+   [url-input]
 
-              (when (:loading? @state)
-                [loading-spinner])
+   (when (:loading? @state)
+     [loading-spinner])
 
-              (let [[unwatched watched]
-                    (->> (:videos @state)
-                         (group-by
-                           :viewed)
-                         (map second)
-                         (map
-                           #(sort-by
-                              (fn [video]
-                                (* -1 (aget (:event video)
-                                            "created_at"))) %)))]
-                [:div.videos-container
-                 [:div.videos-section
-                  [:div.videos-list
-                   (doall
-                     (for [video unwatched]
-                       ^{:key (:url video)}
-                       [video-item video]))]]
+   (let [[unwatched watched]
+         (->> (:videos @state)
+              (group-by
+                :viewed)
+              (map second)
+              (map
+                #(sort-by
+                   (fn [video]
+                     (* -1 (aget (:event video)
+                                 "created_at"))) %)))]
+     [:div.videos-container
+      [:div.videos-section
+       [:div.videos-list
+        (doall
+          (for [video unwatched]
+            ^{:key (:url video)}
+            [video-item video]))]]
 
-                 (when (seq watched)
-                   [:div.videos-section
-                    [:h3 "Watched"]
-                    [:div.videos-list
-                     (doall
-                       (for [video watched]
-                         ^{:key (:url video)}
-                         [video-item video]))]])])])]])})))
+      (when (seq watched)
+        [:div.videos-section
+         [:h3 "Watched"]
+         [:div.videos-list
+          (doall
+            (for [video watched]
+              ^{:key (:url video)}
+              [video-item video]))]])])])
 
-(js/console.log
-  (->
-    (generate-or-load-keys)
-    (pubkey)
-    js/NostrTools.nip19.npubEncode))
+(defn app [state]
+  [:<>
+   [component:header state]
+   [:main
+    (if (:settings-open? @state)
+      [component:settings-panel state]
+      [component:main-view state])]])
 
-(p/do!
+;*** launch ***;
+
+(p/let [sk (generate-or-load-keys)]
+  (js/console.log
+    (-> sk
+        (pubkey)
+        js/NostrTools.nip19.npubEncode))
+  (check-url-params)
+  (subscribe-to-events (pubkey sk) (:relays @state))
   (wait-for-preload)
-  (rdom/render [app] (.getElementById js/document "app")))
+  (rdom/render [app state] (.getElementById js/document "app")))
