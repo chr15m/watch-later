@@ -380,15 +380,32 @@
               (when (:loading? @state)
                 [loading-spinner])
 
-              [:div.videos-list
-               (doall
-                 (for [video (sort-by (fn [video]
-                                        [(:viewed video)
-                                         (* -1 (aget (:event video)
-                                                     "created_at"))])
-                                      (:videos @state))]
-                   ^{:key (:url video)}
-                   [video-item video]))]])]])})))
+              (let [[watched unwatched]
+                    (->> (:videos @state)
+                         (group-by
+                           :viewed)
+                         (map second)
+                         (map
+                           #(sort-by
+                              (fn [video]
+                                (* -1 (aget (:event video)
+                                            "created_at"))) %)))]
+                [:div.videos-container
+                 [:div.videos-section
+                  [:div.videos-list
+                   (doall
+                     (for [video unwatched]
+                       ^{:key (:url video)}
+                       [video-item video]))]]
+
+                 (when (seq watched)
+                   [:div.videos-section
+                    [:h3 "Watched"]
+                    [:div.videos-list
+                     (doall
+                       (for [video watched]
+                         ^{:key (:url video)}
+                         [video-item video]))]])])])]])})))
 
 (js/console.log
   (->
