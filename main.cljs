@@ -360,34 +360,35 @@
 
        :reagent-render
        (fn []
-         [:main
-          [:div.app-header
-           [:h1 "Watch Later"]
-           [:button.icon-button
-            {:on-click #(swap! state update :settings-open? not)
-             :alt "Settings"}
-            [icon
-             (if (:settings-open? @state)
-               (load-icon "outline/x.svg")
-               (load-icon "outline/settings.svg"))]]]
+         [:<>
+          [:header
+           [:nav
+            [:h2 "Watch Later"]
+            [:button.icon-button
+             {:on-click #(swap! state update :settings-open? not)
+              :alt "Settings"}
+             [icon
+              (if (:settings-open? @state)
+                (load-icon "outline/x.svg")
+                (load-icon "outline/settings.svg"))]]]]
+          [:main
+           (if (:settings-open? @state)
+             [settings-panel]
+             [:div.content
+              [url-input]
 
-          (if (:settings-open? @state)
-            [settings-panel]
-            [:div.content
-             [url-input]
+              (when (:loading? @state)
+                [loading-spinner])
 
-             (when (:loading? @state)
-               [loading-spinner])
-
-             [:div.videos-list
-              (doall
-                (for [video (sort-by (fn [video]
-                                       [(:viewed video)
-                                        (* -1 (aget (:event video)
-                                                    "created_at"))])
-                                     (:videos @state))]
-                  ^{:key (:url video)}
-                  [video-item video]))]])])})))
+              [:div.videos-list
+               (doall
+                 (for [video (sort-by (fn [video]
+                                        [(:viewed video)
+                                         (* -1 (aget (:event video)
+                                                     "created_at"))])
+                                      (:videos @state))]
+                   ^{:key (:url video)}
+                   [video-item video]))]])]])})))
 
 (js/console.log
   (->
