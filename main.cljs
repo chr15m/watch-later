@@ -252,7 +252,7 @@
     (fn []
       [:div.url-input
        [:input {:type "text"
-                :placeholder "Paste YouTube URL here"
+                :placeholder "Paste YouTube URL to add"
                 :value @input-value
                 :on-change #(reset! input-value (.. % -target -value))
                 :on-paste #(event:pasted-url state input-value %)}]])))
@@ -265,11 +265,24 @@
     "to sync and store your watch list."]
    (for [[idx relay] (map-indexed vector (:relays @state))]
      ^{:key idx}
-     [:input {:type "text"
-              :value relay
-              :on-change #(swap! state assoc-in
-                                 [:relays idx]
-                                 (.. % -target -value))}])])
+     [:row-group
+      [:input {:type "text"
+               :value relay
+               :on-change #(swap! state assoc-in
+                                  [:relays idx]
+                                  (.. % -target -value))}]
+      [:button.icon-button
+       {:on-click #(swap! state update :relays
+                          (fn [relays]
+                            (vec (concat
+                                  (subvec relays 0 idx)
+                                  (subvec relays (inc idx))))))
+        :alt "Delete relay"}
+       [icon (load-icon "outline/trash.svg")]]])
+   [:button.button
+    {:on-click #(swap! state update :relays conj "wss://")}
+    [icon (load-icon "outline/plus.svg")]
+    " Add relay"]])
 
 (defn event:paste-nsec [decrypting-atom ev]
   (let [pasted-text (.. ev -clipboardData (getData "text"))]
@@ -318,10 +331,10 @@
     (fn [sk nsec]
       [:div.setting-group
        [:h3 "Account"]
-       [:p "Your nsec is the key to your account."]
+       [:p "Your nsec is the key to access your account."]
        [:p
-        "You can sync your watch list to another account,
-        or back it up by saving your nsec key."]
+        "You can sync your watch list to another device,
+        or back it up, by copying and saving your nsec key."]
        [:row-group
         [:input {:type "password"
                  :autocomplete "off"
@@ -350,7 +363,7 @@
            "Copy")]]
        [:p
         "Restore a watch list or sync with a different device
-        by pasting the nsec here."]
+        by pasting the nsec here:"]
        (let [decrypting? (r/atom false)]
          [:div
           (if @decrypting?
