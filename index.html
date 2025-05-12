@@ -13,8 +13,29 @@
     <script src="https://cdn.jsdelivr.net/npm/react@17.0.2/umd/react.production.min.js"></script>
     <script src=" https://cdn.jsdelivr.net/npm/react-dom@17.0.2/umd/react-dom.production.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/scittle@latest/dist/scittle.reagent.min.js" type="application/javascript"></script>
-    <script src=" https://cdn.jsdelivr.net/npm/nostr-tools@2.12.0/lib/nostr.bundle.min.js "></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.12.0/lib/nostr.bundle.min.js"></script>
+    <!-- Import map to resolve bare specifiers -->
+    <script type="importmap">
+       {
+         "imports": {
+           "@noble/hashes": "https://cdn.jsdelivr.net/npm/@noble/hashes@1.8.0/+esm",
+           "@noble/hashes/scrypt": "https://cdn.jsdelivr.net/npm/@noble/hashes@1.8.0/esm/scrypt.js",
+           "@noble/hashes/utils": "https://cdn.jsdelivr.net/npm/@noble/hashes@1.8.0/esm/utils.js",
+           "@noble/hashes/crypto": "https://cdn.jsdelivr.net/npm/@noble/hashes@1.8.0/esm/crypto.js",
+           "@noble/ciphers": "https://cdn.jsdelivr.net/npm/@noble/ciphers@1.3.0/+esm",
+           "@noble/ciphers/chacha": "https://cdn.jsdelivr.net/npm/@noble/ciphers@1.3.0/esm/chacha.js",
+           "@scure/base": "https://cdn.jsdelivr.net/npm/@scure/base@1.2.5/+esm"
+         }
+       }
+    </script>
+    <script
+      type="module"
+      src="https://cdn.jsdelivr.net/npm/nostr-tools@2.12.0/lib/esm/nip49.js"></script>
+    <script type="module">
+      import { encrypt, decrypt } from "https://cdn.jsdelivr.net/npm/nostr-tools@2.12.0/lib/esm/nip49.js";
+      window.NostrTools.nip49 = {"encrypt": encrypt, "decrypt": decrypt};
+    </script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script> -->
     <link rel="stylesheet" href="style.css">
     <script type="application/x-scittle" src="https://cdn.jsdelivr.net/gh/chr15m/scittle-iconloader/iconloader.cljs"></script>
     <script type="application/x-scittle" src="main.cljs"></script>

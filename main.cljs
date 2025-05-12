@@ -183,17 +183,16 @@
     (.execCommand js/document "copy")
     (.removeChild (.-body js/document) el)))
 
-(defn encrypt-key-with-pin [nsec pin]
+(defn encrypt-key-with-pw [sk pw]
   (try
-    (js/NostrTools.nip49.encryptPrivateKey nsec pin)
+    (js/NostrTools.nip49.encrypt sk pw)
     (catch :default e
       (js/console.error "Failed to encrypt key" e)
       nil)))
 
-(defn decrypt-key-with-pin [encrypted-key pin]
+(defn decrypt-key-with-pw [ncryptsec pw]
   (try
-    (let [result (js/NostrTools.nip49.decryptPrivateKey encrypted-key pin)]
-      (.-data result))
+    (js/NostrTools.nip49.decrypt ncryptsec pw)
     (catch :default e
       (js/console.error "Failed to decrypt key" e)
       nil)))
@@ -272,24 +271,58 @@
                                  [:relays idx]
                                  (.. % -target -value))}])])
 
+(defn event:paste-nsec [ev]
+  (let [pasted-text (.. ev -clipboardData (getData "text"))]
+    (js/console.log "pasted-text" pasted-text)
+    (.preventDefault ev)
+    (try
+      (if (.startsWith pasted-text "ncryptsec")
+        ;; Handle ncryptsec directly
+        (when (js/confirm "Are you sure you want to replace the private key?")
+          (let [pw (js/prompt "Enter password to decrypt key:")]
+            (when (seq pw)
+              (let [decrypted (decrypt-key-with-pw pasted-text pw)]
+                (if decrypted
+                  (do
+                    (set-key decrypted)
+                    (js/window.location.reload))
+                  (js/alert "Failed to decrypt with provided password"))))))
+
+        ;; Handle nsec or other formats
+        (let [decoded (js/NostrTools.nip19.decode pasted-text)
+              type (.-type decoded)
+              data (.-data decoded)]
+          (when (js/confirm "Are you sure you want to replace the private key?")
+            (if (= type "nsec")
+              (do
+                (set-key data)
+                (js/window.location.reload))
+              (js/alert "Invalid key format")))))
+      (catch :default e
+        (js/console.error "Error importing key" e)
+        (js/alert "Invalid key format")))))
+
 (defn component:settings-nsec []
   (let [password (r/atom "")]
-    (fn [_state nsec nsec-input]
+    (fn [sk nsec]
       [:div.setting-group
        [:h3 "Account"]
+       [:p "Your nsec is the key to your account."]
        [:p
-        "You can sync your watch list to another account, or back it up by saving
-        your nsec key."]
+        "You can sync your watch list to another account,
+        or back it up by saving your nsec key."]
        [:row-group
         [:input {:type "password"
+                 :autocomplete "off"
                  :placeholder
                  "(Optional) Enter a password to encrypt your nsec key."
                  :value @password
                  :on-change #(reset! password (.. % -target -value))}]
         [:button.button
          {:on-click #(p/let [result (if (seq @password)
-                                      (encrypt-key-with-pin nsec @password)
+                                      (encrypt-key-with-pw sk @password)
                                       nsec)]
+                       (js/console.log "encypted" result)
                        (copy-to-clipboard result)
                        (js/alert (str (if (seq @password)
                                         "ncrypt"
@@ -301,39 +334,9 @@
         by pasting the nsec here."]
    [:div
     [:input {:type "password"
+             :autocomplete "off"
              :placeholder "Paste nsec/ncrypt here to sync up another device."
-             :value @nsec-input
-             :on-change #(reset! nsec-input (.. % -target -value))}]
-    [:button.button
-     {:on-click
-      #(when
-         (js/confirm "Are you sure you want to replace the private key?")
-         (try
-           (let [decoded (js/NostrTools.nip19.decode @nsec-input)
-                 type (.-type decoded)
-                 data (.-data decoded)]
-             (cond
-               (= type "nsec")
-               (do
-                 (set-key data)
-                 (js/window.location.reload))
-
-               (= type "ncryptsec")
-               (let [pin (js/prompt "Enter PIN to decrypt key:")]
-                 (when (and pin (not= pin ""))
-                   (let [decrypted (decrypt-key-with-pin @nsec-input pin)]
-                     (if decrypted
-                       (do
-                         (set-key decrypted)
-                         (js/window.location.reload))
-                       (js/alert "Failed to decrypt with provided PIN")))))
-
-               :else
-               (js/alert "Invalid key format")))
-           (catch :default e
-             (js/console.error "Error importing key" e)
-             (js/alert "Invalid key format"))))}
-     "Import Key"]]])))
+             :on-paste event:paste-nsec}]]])))
 
 (defn component:settings-sync [_state nsec pin-input show-qr]
   [:div.setting-group
@@ -348,13 +351,14 @@
        "Hide QR Code"]]
      [:div
       [:input {:type "password"
+               :autocomplete "off"
                :placeholder "Enter a PIN to encrypt the transfer"
                :value @pin-input
                :on-change #(reset! pin-input (.. % -target -value))}]
       [:button.button
        {:on-click #(when (and @pin-input (not= @pin-input ""))
                      (p/let [encrypted-key
-                             (encrypt-key-with-pin nsec @pin-input)]
+                             (encrypt-key-with-pw nsec @pin-input)]
                        (when encrypted-key
                          (let [url (str (.-origin js/window.location)
                                         (.-pathname js/window.location)
@@ -374,7 +378,7 @@
     [:div.settings-panel
      [:h2 "Settings"]
      #_ [component:settings-sync state nsec (r/atom "") (r/atom false)]
-     [component:settings-nsec state nsec (r/atom "")]
+     [component:settings-nsec sk nsec]
      [component:settings-relays state]]))
 
 (defn check-url-params []
@@ -383,7 +387,7 @@
     (when key-param
       (let [pin (js/prompt "Enter PIN to decrypt key:")]
         (when (and pin (not= pin ""))
-          (let [decrypted (decrypt-key-with-pin key-param pin)]
+          (let [decrypted (decrypt-key-with-pw key-param pin)]
             (when decrypted
               (let [pk (js/NostrTools.getPublicKey decrypted)
                     keys-obj #js {:sk decrypted :pk pk}]
