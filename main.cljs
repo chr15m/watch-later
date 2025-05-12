@@ -199,7 +199,7 @@
 
 ;; Components
 (defn loading-spinner []
-  [:div.loader])
+  [:div.loading [:div]])
 
 (defn video-item [{:keys [url viewed uuid event metadata]}]
   (js/console.log "video-item render" url viewed)
@@ -211,20 +211,21 @@
     [:div.video-item {:class (when viewed "viewed")}
      [:div.thumbnail-container
       [:a {:href url :target "_blank"}
-       [:img.thumbnail {:src thumbnail-url :alt "Video thumbnail"}]
-       [:div.video-title title]]]
-     [:div.video-controls
-      [:button.icon-button
-       {:on-click #(toggle-viewed {:url url
-                                   :viewed viewed
-                                   :uuid uuid
-                                   :event event
-                                   :metadata metadata})
-        :alt (if viewed "Viewed" "Mark as viewed")}
-       [icon
-        (if viewed
-          (load-icon "filled/eye.svg")
-          (load-icon "outline/eye.svg"))]]]]))
+       [:img.thumbnail {:src thumbnail-url :alt "Video thumbnail"}]]
+      [:action-buttons
+       [:div.video-title title] 
+      [:div.video-controls
+       [:button.icon-button
+        {:on-click #(toggle-viewed {:url url
+                                    :viewed viewed
+                                    :uuid uuid
+                                    :event event
+                                    :metadata metadata})
+         :alt (if viewed "Viewed" "Mark as viewed")}
+        [icon
+         (if viewed
+           (load-icon "filled/eye.svg")
+           (load-icon "outline/eye.svg"))]]]]]]))
 
 (defn event:pasted-url [state input-value ev]
   (let [pasted-text (.. ev -clipboardData (getData "text"))]
@@ -363,7 +364,9 @@
          [:<>
           [:header
            [:nav
-            [:h2 "Watch Later"]
+            [:h1
+             [icon (load-icon "filled/brand-youtube.svg")]
+             "Watch Later"]
             [:button.icon-button
              {:on-click #(swap! state update :settings-open? not)
               :alt "Settings"}
@@ -380,7 +383,7 @@
               (when (:loading? @state)
                 [loading-spinner])
 
-              (let [[watched unwatched]
+              (let [[unwatched watched]
                     (->> (:videos @state)
                          (group-by
                            :viewed)

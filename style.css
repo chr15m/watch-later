@@ -61,10 +61,6 @@ html, body, #app {
   gap: 1em;
 }
 
-i.icon {
-  display: inherit;
-}
-
 a {
   color: var(--fg);
 }
@@ -168,6 +164,7 @@ nav ul li {
 header nav {
   display: flex;
   justify-content: space-between;
+  align-items: center;
 }
 
 header nav > * {
@@ -322,7 +319,7 @@ hr {
 
 /* special */
 
-inline-icon {
+i.icon, inline-icon {
   display: inline-flex;
   justify-content: center;
   align-items: center;
@@ -330,24 +327,15 @@ inline-icon {
   margin: 0px 0.25em;
 }
 
-ul.log {
-  list-style-type: none;
-  margin: 0px;
-  padding: 0px;
+i.icon > svg {
+  width: 1em;
+  height: 1em;
+  margin-top: -0.125em;
 }
 
-ul.log li {
-  margin: 2em 0px;
-}
-
-ul.log action-buttons {
-  display: flex;
-  justify-content: end;
-  gap: 0;
-}
-
-ul.log action-buttons inline-icon {
-  padding: 0.5em;
+button i.icon > svg {
+  width: 1.5em;
+  height: 1.5em;
   margin: 0px;
 }
 
@@ -365,16 +353,6 @@ action-buttons * {
 action-buttons .selected {
   border: 2px solid var(--shade);
   border-radius: var(--radius);
-}
-
-div.result {
-  border: .1rem solid var(--shade);
-  border-radius: var(--radius);
-  display: flex;
-}
-
-div.result > div {
-  padding: 1em;
 }
 
 [data-notification-text] {
@@ -447,27 +425,22 @@ div.result > div {
   border-radius: var(--radius);
 }
 
-sprite-dialog canvas {
-  margin: 1em;
-  padding: 1em;
-  min-width: 0;
-  min-height: 0;
-  max-width: 80%;
-  height: auto;
-  max-height: 80%;
-  object-fit: contain;
-  border-radius: var(--radius);
+/*** application specific ***/
+
+.videos-section h3 {
+  text-align: center;
 }
 
-.chequerboard {
-  background-color: #888;
-  background-image:
-    linear-gradient(45deg, #999 25%, transparent 25%),
-    linear-gradient(-45deg, #999 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #999 75%),
-    linear-gradient(-45deg, transparent 75%, #999 75%);
-  background-size: 40px 40px;
-  background-position: 0 0, 0 20px, 20px -20px, -20px 0px;
+.videos-list {
+  display: flex;
+  gap: 1em;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.video-item {
+  width: 320px;
+  height: 280px;
 }
 
 /*** loading spinner ***/
@@ -476,16 +449,17 @@ sprite-dialog canvas {
   animation: spin 1s linear infinite;
 }
 
-#loading {
+.loading {
   display: flex;
   flex-direction: column;
   gap: 2em;
   justify-content: center;
   align-items: center;
   height: 100%;
+  margin: 1em;
 }
 
-#loading > div:first-child {
+.loading > div:first-child {
   animation: spin 0.33s linear infinite;
   width: 48px;
   height: 48px;
