@@ -272,24 +272,33 @@
                                  [:relays idx]
                                  (.. % -target -value))}])])
 
-(defn component:settings-nsec [_state nsec nsec-input]
-  [:div.setting-group
-   [:h3 "Account"]
-   [:p
-    "You can sync your watch list to another account, or back it up by saving
-    your nsec key."]
-   [:row-group
-    [:input {:type "password"
-             :placeholder
-             "(Optional) Enter a password to encrypt your nsec key."}]
-    [:button.button
-     {:on-click #(do (copy-to-clipboard nsec)
-                     (js/alert "nsec copied to clipboard!"))}
-     "Copy"]]
-   [:p
-    "Restore a watch list or sync with a different device
-    by pasting the nsec here."]
-
+(defn component:settings-nsec []
+  (let [password (r/atom "")]
+    (fn [_state nsec nsec-input]
+      [:div.setting-group
+       [:h3 "Account"]
+       [:p
+        "You can sync your watch list to another account, or back it up by saving
+        your nsec key."]
+       [:row-group
+        [:input {:type "password"
+                 :placeholder
+                 "(Optional) Enter a password to encrypt your nsec key."
+                 :value @password
+                 :on-change #(reset! password (.. % -target -value))}]
+        [:button.button
+         {:on-click #(p/let [result (if (seq @password)
+                                      (encrypt-key-with-pin nsec @password)
+                                      nsec)]
+                       (copy-to-clipboard result)
+                       (js/alert (str (if (seq @password)
+                                        "ncrypt"
+                                        "nsec")
+                                      " copied to clipboard!")))}
+         "Copy"]]
+       [:p
+        "Restore a watch list or sync with a different device
+        by pasting the nsec here."]
    [:div
     [:input {:type "password"
              :placeholder "Paste nsec/ncrypt here to sync up another device."
@@ -303,15 +312,28 @@
            (let [decoded (js/NostrTools.nip19.decode @nsec-input)
                  type (.-type decoded)
                  data (.-data decoded)]
-             (if (= type "nsec")
+             (cond
+               (= type "nsec")
                (do
                  (set-key data)
                  (js/window.location.reload))
-               (js/alert "Invalid nsec format")))
+
+               (= type "ncryptsec")
+               (let [pin (js/prompt "Enter PIN to decrypt key:")]
+                 (when (and pin (not= pin ""))
+                   (let [decrypted (decrypt-key-with-pin @nsec-input pin)]
+                     (if decrypted
+                       (do
+                         (set-key decrypted)
+                         (js/window.location.reload))
+                       (js/alert "Failed to decrypt with provided PIN")))))
+
+               :else
+               (js/alert "Invalid key format")))
            (catch :default e
-             (js/console.error "Error importing nsec" e)
-             (js/alert "Invalid nsec format"))))}
-     "Import Key"]]])
+             (js/console.error "Error importing key" e)
+             (js/alert "Invalid key format"))))}
+     "Import Key"]]])))
 
 (defn component:settings-sync [_state nsec pin-input show-qr]
   [:div.setting-group
