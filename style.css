@@ -339,20 +339,14 @@ button i.icon > svg {
   margin: 0px;
 }
 
-action-buttons {
+row-group {
   display: flex;
   justify-content: end;
   gap: 1em;
 }
 
-action-buttons * {
-  cursor: pointer;
-  border: 2px solid transparent;
-}
-
-action-buttons .selected {
-  border: 2px solid var(--shade);
-  border-radius: var(--radius);
+row-group > * {
+  margin: 0;
 }
 
 [data-notification-text] {
@@ -441,6 +435,11 @@ action-buttons .selected {
 .video-item {
   width: 320px;
   height: 280px;
+}
+
+.setting-group h3 {
+  margin-top: 3em;
+  border-bottom: 1px solid var(--fg);
 }
 
 /*** loading spinner ***/

@@ -213,20 +213,20 @@
      [:div.thumbnail-container
       [:a {:href url :target "_blank"}
        [:img.thumbnail {:src thumbnail-url :alt "Video thumbnail"}]]
-      [:action-buttons
-       [:div.video-title title] 
-      [:div.video-controls
-       [:button.icon-button
-        {:on-click #(toggle-viewed {:url url
-                                    :viewed viewed
-                                    :uuid uuid
-                                    :event event
-                                    :metadata metadata})
-         :alt (if viewed "Viewed" "Mark as viewed")}
-        [icon
-         (if viewed
-           (load-icon "filled/eye.svg")
-           (load-icon "outline/eye.svg"))]]]]]]))
+      [:row-group
+       [:div.video-title title]
+       [:div.video-controls
+        [:button.icon-button
+         {:on-click #(toggle-viewed {:url url
+                                     :viewed viewed
+                                     :uuid uuid
+                                     :event event
+                                     :metadata metadata})
+          :alt (if viewed "Viewed" "Mark as viewed")}
+         [icon
+          (if viewed
+            (load-icon "filled/eye.svg")
+            (load-icon "outline/eye.svg"))]]]]]]))
 
 (defn event:pasted-url [state input-value ev]
   (let [pasted-text (.. ev -clipboardData (getData "text"))]
@@ -261,6 +261,9 @@
 (defn component:settings-relays [state]
   [:div.setting-group
    [:h3 "Relays"]
+   [:p
+    "Set the Nostr relays you'd like to use "
+    "to sync and store your watch list."]
    (for [[idx relay] (map-indexed vector (:relays @state))]
      ^{:key idx}
      [:input {:type "text"
@@ -272,14 +275,24 @@
 (defn component:settings-nsec [_state nsec nsec-input]
   [:div.setting-group
    [:h3 "Account"]
-   [:button.button
-    {:on-click #(do (copy-to-clipboard nsec)
-                    (js/alert "nsec copied to clipboard!"))}
-    "Copy nsec"]
+   [:p
+    "You can sync your watch list to another account, or back it up by saving
+    your nsec key."]
+   [:row-group
+    [:input {:type "password"
+             :placeholder
+             "(Optional) Enter a password to encrypt your nsec key."}]
+    [:button.button
+     {:on-click #(do (copy-to-clipboard nsec)
+                     (js/alert "nsec copied to clipboard!"))}
+     "Copy"]]
+   [:p
+    "Restore a watch list or sync with a different device
+    by pasting the nsec here."]
 
    [:div
-    [:input {:type "text"
-             :placeholder "Paste nsec here to import"
+    [:input {:type "password"
+             :placeholder "Paste nsec/ncrypt here to sync up another device."
              :value @nsec-input
              :on-change #(reset! nsec-input (.. % -target -value))}]
     [:button.button
@@ -303,6 +316,8 @@
 (defn component:settings-sync [_state nsec pin-input show-qr]
   [:div.setting-group
    [:h3 "Sync to Device"]
+   [:p "You can sync your watch list to another device by scanning a QR code, or
+       copying and pasting the nsec."]
    (if @show-qr
      [:div
       [:div#qrcode]
@@ -311,7 +326,7 @@
        "Hide QR Code"]]
      [:div
       [:input {:type "password"
-               :placeholder "Enter PIN for encryption"
+               :placeholder "Enter a PIN to encrypt the transfer"
                :value @pin-input
                :on-change #(reset! pin-input (.. % -target -value))}]
       [:button.button
@@ -336,7 +351,7 @@
         nsec (js/NostrTools.nip19.nsecEncode sk)]
     [:div.settings-panel
      [:h2 "Settings"]
-     [component:settings-sync state nsec (r/atom "") (r/atom false)]
+     #_ [component:settings-sync state nsec (r/atom "") (r/atom false)]
      [component:settings-nsec state nsec (r/atom "")]
      [component:settings-relays state]]))
 
