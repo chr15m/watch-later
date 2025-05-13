@@ -12,10 +12,13 @@
     [promesa.core :as p]))
 
 ; TODO
-; - when the eye is clicked show a loading spinner in the button
-; - replace nsec paste box with something that blanks immediately on pasting
+; - show help on the front page
 ; - save relay list to nostr
+; - when the eye is clicked show a loading spinner in the button
 ; - make it an installable pwa
+; - work out a good set of default relays
+
+; TODO (stretch goals)
 ; - use the yt api to play in a modal, track playback, and store playback time
 ; - cache stored events and only request since last posted
 
@@ -388,8 +391,8 @@
          [:div
           (if @decrypting?
             [component:loading-spinner]
-            [:input {:type "password"
-                     :autocomplete "off"
+            [:input {:autocomplete "off"
+                     :value ""
                      :placeholder
                      (str
                        "Paste nsec/ncrypt here "
