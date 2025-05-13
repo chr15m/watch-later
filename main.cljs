@@ -41,8 +41,7 @@
                         :videos []
                         :settings-open? false
                         :relays default-relays
-                        :qr-code nil
-                        :pin nil
+                        :generated? nil
                         :sk nil}))
 
 ;*** nostr functions ***;
@@ -58,12 +57,16 @@
 
 (defn generate-or-load-keys []
   (let [stored-key (js/localStorage.getItem localstorage-key)
-        decoded-sk (try (js/NostrTools.nip19.decode stored-key)
+        decoded-sk (try
+                     (let [sk (js/NostrTools.nip19.decode stored-key)]
+                       (and sk
+                            (= (aget sk "type") "nsec")
+                            (aget sk "data")))
                         (catch :default _e nil))]
-    (or (and decoded-sk
-             (= (aget decoded-sk "type") "nsec")
-             (aget decoded-sk "data"))
-        (set-key (js/NostrTools.generateSecretKey)))))
+    (if decoded-sk
+      ; [sk generated?]
+      [decoded-sk false]
+      [(set-key (js/NostrTools.generateSecretKey)) true])))
 
 (defn encrypt-content [sk pk content]
   (js/NostrTools.nip04.encrypt sk pk (js/JSON.stringify (clj->js content))))
@@ -460,7 +463,9 @@
    [component:url-input]
 
    (when (or (:loading? @state)
-             (nil? (:eose? @state)))
+             (and
+               (nil? (:eose? @state))
+               (not (:generated? @state))))
      [component:loading-spinner])
 
    (let [[unwatched watched]
@@ -501,12 +506,14 @@
 
 ;*** launch ***;
 
-(p/let [sk (generate-or-load-keys)]
+(p/let [[sk generated?] (generate-or-load-keys)]
   (js/console.log
     (-> sk
         (pubkey)
         nostr-encode-npub))
-  (swap! state assoc :sk sk)
+  (swap! state assoc
+         :sk sk
+         :generated? generated?)
   (check-url-params)
   (subscribe-to-events
     sk (pubkey sk) (:relays @state)
