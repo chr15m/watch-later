@@ -12,9 +12,9 @@
     [promesa.core :as p]))
 
 ; TODO
-; - call generate-or-load-keys once and then store sk in @state
-; - save relay list
-; - show a loading spinner until the first eose is received
+; - when the eye is clicked show a loading spinner in the button
+; - replace nsec paste box with something that blanks immediately on pasting
+; - save relay list to nostr
 ; - make it an installable pwa
 ; - use the yt api to play in a modal, track playback, and store playback time
 ; - cache stored events and only request since last posted
@@ -99,26 +99,23 @@
           published (js/Promise.any (.publish pool (clj->js relays) event))]
     published))
 
-(defn event:nostr-event [event event-callback]
-  (js/console.log "handle-event" event)
-  (js/console.log "id:" (aget event "id"))
-  (let [sk (generate-or-load-keys)
-        decrypted-content (decrypt-content sk (pubkey sk) (.-content event))]
-    (js/console.log "handle-event decrypted content"
-                    (clj->js decrypted-content))
-    (when decrypted-content
-      (event-callback decrypted-content))))
-
-(defn subscribe-to-events [pk relays event-callback eose-callback]
+(defn subscribe-to-events [sk pk relays event-callback eose-callback]
   (let [pool (js/NostrTools.SimplePool.)
-        sub (.subscribeMany pool
-                            (clj->js relays)
-                            (clj->js [{:kinds [nostr-kind]
-                                       :authors [pk]
-                                       :#n [app-name]}])
-                            (clj->js {:onevent
-                                      #(event:nostr-event % event-callback)
-                                      :oneose eose-callback}))]
+        sub (.subscribeMany
+              pool
+              (clj->js relays)
+              (clj->js [{:kinds [nostr-kind]
+                         :authors [pk]
+                         :#n [app-name]}])
+              (clj->js {:onevent
+                        (fn [event]
+                          (let [decrypted-content
+                                (decrypt-content
+                                  sk (pubkey sk)
+                                  (.-content event))]
+                            (when decrypted-content
+                              (event-callback decrypted-content event))))
+                        :oneose eose-callback}))]
     sub))
 
 (defn encrypt-key-with-pw [sk pw]
@@ -210,10 +207,9 @@
 (defn component:loading-spinner []
   [:div.loading [:div]])
 
-(defn event:toggle-viewed [video]
+(defn event:toggle-viewed [sk video]
   (swap! state assoc :loading? true)
-  (let [sk (generate-or-load-keys)
-        uuid (:uuid video)
+  (let [uuid (:uuid video)
         url (:url video)
         new-viewed (not (:viewed video))
         metadata (:metadata video)]
@@ -223,7 +219,7 @@
       (publish-event event (:relays @state))
       (swap! state assoc :loading? false))))
 
-(defn component:video-item [{:keys [url viewed uuid event metadata]}]
+(defn component:video-item [sk {:keys [url viewed uuid event metadata]}]
   (js/console.log "video-item render" url viewed)
   (let [youtube-id (get-youtube-id url)
         thumbnail-url (get-thumbnail-url youtube-id)
@@ -238,11 +234,13 @@
        [:div.video-title title]
        [:div.video-controls
         [:button.icon-button
-         {:on-click #(event:toggle-viewed {:url url
-                                     :viewed viewed
-                                     :uuid uuid
-                                     :event event
-                                     :metadata metadata})
+         {:on-click #(event:toggle-viewed
+                       sk
+                       {:url url
+                        :viewed viewed
+                        :uuid uuid
+                        :event event
+                        :metadata metadata})
           :alt (if viewed "Viewed" "Mark as viewed")}
          [icon
           (if viewed
@@ -255,7 +253,7 @@
       (reset! input-value pasted-text)
       (js/setTimeout
         (fn []
-          (let [sk (generate-or-load-keys)
+          (let [sk (:sk @state)
                 youtube-id (get-youtube-id pasted-text)]
             (swap! state assoc :loading? true)
             (p/let [hash-fragment (hash-url pasted-text)
@@ -392,8 +390,10 @@
             [component:loading-spinner]
             [:input {:type "password"
                      :autocomplete "off"
-                     :placeholder "Paste nsec/ncrypt here
-                                  to sync up another device."
+                     :placeholder
+                     (str
+                       "Paste nsec/ncrypt here "
+                       "to sync up another device.")
                      :on-paste (partial event:paste-nsec decrypting?)}])])])))
 
 (defn component:settings-sync [_state nsec pin-input show-qr]
@@ -431,7 +431,7 @@
        "Generate QR Code"]])])
 
 (defn component:settings-panel [state]
-  (let [sk (generate-or-load-keys)]
+  (let [sk (:sk @state)]
     [:div.settings-panel
      [:h2 "Settings"]
      #_ [component:settings-sync state nsec (r/atom "") (r/atom false)]
@@ -456,7 +456,8 @@
   [:div.content
    [component:url-input]
 
-   (when (:loading? @state)
+   (when (or (:loading? @state)
+             (nil? (:eose? @state)))
      [component:loading-spinner])
 
    (let [[unwatched watched]
@@ -476,7 +477,7 @@
         (doall
           (for [video unwatched]
             ^{:key (:url video)}
-            [component:video-item video]))]]
+            [component:video-item (:sk @state) video]))]]
 
       (when (seq watched)
         [:div.videos-section
@@ -485,7 +486,7 @@
           (doall
             (for [video watched]
               ^{:key (:url video)}
-              [component:video-item video]))]])])])
+              [component:video-item (:sk @state) video]))]])])])
 
 (defn app [state]
   [:<>
@@ -505,10 +506,10 @@
   (swap! state assoc :sk sk)
   (check-url-params)
   (subscribe-to-events
-    (pubkey sk) (:relays @state)
+    sk (pubkey sk) (:relays @state)
     ; event decrypted content received
     (fn [decrypted-content event]
-      #(swap! state update :videos
+      (swap! state update :videos
               (fn [videos]
                 (let [existing-index
                       (first (keep-indexed
@@ -521,6 +522,6 @@
                     (conj (or videos [])
                           (assoc decrypted-content :event event)))))))
     ; eose received
-    (js/console.log.bind js/console.log "EOSE"))
+    #(swap! state assoc :eose? true))
   (wait-for-preload)
   (rdom/render [app state] (.getElementById js/document "app")))
