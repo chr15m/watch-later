@@ -12,11 +12,15 @@
     [promesa.core :as p]))
 
 ; TODO
+; - call generate-or-load-keys once and then store sk in @state
 ; - save relay list
+; - show a loading spinner until the first eose is received
 ; - make it an installable pwa
 ; - use the yt api to play in a modal, track playback, and store playback time
+; - cache stored events and only request since last posted
 
-;; Constants
+; immutable constant data
+
 (def app-name "cx.mccormick.watchlater")
 (def default-relays ["wss://relay.damus.io"
                      "wss://relay.nostr.band"])
@@ -26,12 +30,10 @@
   "watch-later-nostr-key")
 (def nostr-kind 30078)
 
+; mutable state data
+
 (set-svg-base-url icon-url)
 
-; TODO:
-; - cache stored events and only request since last posted
-
-;; State management
 (defonce state (r/atom {:loading? false
                         :videos []
                         :settings-open? false
@@ -40,7 +42,7 @@
                         :pin nil
                         :sk nil}))
 
-;; Utility functions
+;*** nostr functions ***;
 
 (defn pubkey [sk]
   (js/NostrTools.getPublicKey sk))
@@ -59,6 +61,87 @@
              (= (aget decoded-sk "type") "nsec")
              (aget decoded-sk "data"))
         (set-key (js/NostrTools.generateSecretKey)))))
+
+(defn encrypt-content [sk pk content]
+  (js/NostrTools.nip04.encrypt sk pk (js/JSON.stringify (clj->js content))))
+
+(defn decrypt-content [sk pk encrypted-content]
+  (try
+    (let [decrypted (js/NostrTools.nip04.decrypt sk pk encrypted-content)]
+      (js->clj (js/JSON.parse decrypted) :keywordize-keys true))
+    (catch :default e
+      (js/console.error "Failed to decrypt content" e)
+      nil)))
+
+(defn create-event [sk pk url viewed hash-fragment metadata & [existing-uuid]]
+  (js/console.log "create-event"
+                  sk pk url viewed hash-fragment metadata existing-uuid)
+  (let [uuid (or existing-uuid (str (random-uuid)))
+        content {:uuid uuid
+                 :url url
+                 :useragent (.-userAgent js/navigator)
+                 :viewed viewed
+                 :metadata metadata}
+        encrypted-content (encrypt-content sk pk content)
+        event-template
+        #js {:kind nostr-kind
+             :created_at (js/Math.floor (/ (js/Date.now) 1000))
+             :tags #js [#js ["d" (str app-name ":" uuid)]
+                        #js ["n" app-name]]
+             :content encrypted-content}]
+    (js/console.log "event-template" event-template)
+    (js/console.log "content" (clj->js content))
+    (js/NostrTools.finalizeEvent event-template sk)))
+
+(defn publish-event [event relays]
+  (js/console.log "publish-event" event relays)
+  (p/let [pool (js/NostrTools.SimplePool.)
+          published (js/Promise.any (.publish pool (clj->js relays) event))]
+    published))
+
+(defn event:nostr-event [event event-callback]
+  (js/console.log "handle-event" event)
+  (js/console.log "id:" (aget event "id"))
+  (let [sk (generate-or-load-keys)
+        decrypted-content (decrypt-content sk (pubkey sk) (.-content event))]
+    (js/console.log "handle-event decrypted content"
+                    (clj->js decrypted-content))
+    (when decrypted-content
+      (event-callback decrypted-content))))
+
+(defn subscribe-to-events [pk relays event-callback eose-callback]
+  (let [pool (js/NostrTools.SimplePool.)
+        sub (.subscribeMany pool
+                            (clj->js relays)
+                            (clj->js [{:kinds [nostr-kind]
+                                       :authors [pk]
+                                       :#n [app-name]}])
+                            (clj->js {:onevent
+                                      #(event:nostr-event % event-callback)
+                                      :oneose eose-callback}))]
+    sub))
+
+(defn encrypt-key-with-pw [sk pw]
+  (try
+    (js/NostrTools.nip49.encrypt sk pw)
+    (catch :default e
+      (js/console.error "Failed to encrypt key" e)
+      nil)))
+
+(defn decrypt-key-with-pw [ncryptsec pw]
+  (try
+    (js/NostrTools.nip49.decrypt ncryptsec pw)
+    (catch :default e
+      (js/console.error "Failed to decrypt key" e)
+      nil)))
+
+(def nostr-decode js/NostrTools.nip19.decode)
+
+(def nostr-encode-nsec js/NostrTools.nip19.nsecEncode)
+
+(def nostr-encode-npub js/NostrTools.nip19.npubEncode)
+
+;*** utility functions ***;
 
 (def re-yt
   (js/RegExp.
@@ -89,17 +172,6 @@
       (js->clj json :keywordize-keys true))
     js/console.error))
 
-(defn encrypt-content [sk pk content]
-  (js/NostrTools.nip04.encrypt sk pk (js/JSON.stringify (clj->js content))))
-
-(defn decrypt-content [sk pk encrypted-content]
-  (try
-    (let [decrypted (js/NostrTools.nip04.decrypt sk pk encrypted-content)]
-      (js->clj (js/JSON.parse decrypted) :keywordize-keys true))
-    (catch :default e
-      (js/console.error "Failed to decrypt content" e)
-      nil)))
-
 (defn hash-url [url]
   (p/let [encoder (js/TextEncoder.)
           data (.encode encoder url)
@@ -111,63 +183,34 @@
                           "")]
     (.substr hash-hex 0 8)))
 
-(defn create-event [sk pk url viewed hash-fragment metadata & [existing-uuid]]
-  (js/console.log "create-event"
-                  sk pk url viewed hash-fragment metadata existing-uuid)
-  (let [uuid (or existing-uuid (str (random-uuid)))
-        content {:uuid uuid
-                 :url url
-                 :useragent (.-userAgent js/navigator)
-                 :viewed viewed
-                 :metadata metadata}
-        encrypted-content (encrypt-content sk pk content)
-        event-template
-        #js {:kind nostr-kind
-             :created_at (js/Math.floor (/ (js/Date.now) 1000))
-             :tags #js [#js ["d" (str app-name ":" uuid)]
-                        #js ["n" app-name]]
-             :content encrypted-content}]
-    (js/console.log "event-template" event-template)
-    (js/console.log "content" (clj->js content))
-    (js/NostrTools.finalizeEvent event-template sk)))
+(defn copy-to-clipboard [text]
+  (let [el (.createElement js/document "textarea")]
+    (set! (.-value el) text)
+    (.appendChild (.-body js/document) el)
+    (.select el)
+    (.execCommand js/document "copy")
+    (.removeChild (.-body js/document) el)))
 
-(defn publish-event [event relays]
-  (js/console.log "publish-event" event relays)
-  (p/let [pool (js/NostrTools.SimplePool.)
-          published (js/Promise.any (.publish pool (clj->js relays) event))]
-    published))
+(defn check-url-params []
+  (let [url-params (js/URLSearchParams. (.-search js/window.location))
+        key-param (.get url-params "key")]
+    (when key-param
+      (let [pin (js/prompt "Enter PIN to decrypt key:")]
+        (when (and pin (not= pin ""))
+          (let [decrypted (decrypt-key-with-pw key-param pin)]
+            (when decrypted
+              (let [pk (pubkey decrypted)
+                    keys-obj #js {:sk decrypted :pk pk}]
+                (js/localStorage.setItem "nostr-key"
+                                         (js/JSON.stringify keys-obj))
+                (js/window.location.reload)))))))))
 
-(defn handle-event [event]
-  (js/console.log "handle-event" event)
-  (js/console.log "id:" (aget event "id"))
-  (let [sk (generate-or-load-keys)
-        decrypted (decrypt-content sk (pubkey sk) (.-content event))]
-    (js/console.log "handle-event decrypted content" (clj->js decrypted))
-    (when decrypted
-      (swap! state update :videos
-             (fn [videos]
-               (let [existing-index
-                     (first (keep-indexed
-                              (fn [idx v]
-                                (when (= (:url v) (:url decrypted)) idx))
-                              videos))]
-                 (if existing-index
-                   (assoc-in videos [existing-index]
-                             (assoc decrypted :event event))
-                   (conj (or videos [])
-                         (assoc decrypted :event event)))))))))
+;*** components and events ***;
 
-(defn subscribe-to-events [pk relays]
-  (let [pool (js/NostrTools.SimplePool.)
-        sub (.subscribeMany pool
-                            (clj->js relays)
-                            (clj->js [{:kinds [nostr-kind]
-                                       :authors [pk]
-                                       :#n [app-name]}])
-                            (clj->js {:onevent handle-event}))]
-    sub))
+(defn component:loading-spinner []
+  [:div.loading [:div]])
 
-(defn toggle-viewed [video]
+(defn event:toggle-viewed [video]
   (swap! state assoc :loading? true)
   (let [sk (generate-or-load-keys)
         uuid (:uuid video)
@@ -180,33 +223,7 @@
       (publish-event event (:relays @state))
       (swap! state assoc :loading? false))))
 
-(defn copy-to-clipboard [text]
-  (let [el (.createElement js/document "textarea")]
-    (set! (.-value el) text)
-    (.appendChild (.-body js/document) el)
-    (.select el)
-    (.execCommand js/document "copy")
-    (.removeChild (.-body js/document) el)))
-
-(defn encrypt-key-with-pw [sk pw]
-  (try
-    (js/NostrTools.nip49.encrypt sk pw)
-    (catch :default e
-      (js/console.error "Failed to encrypt key" e)
-      nil)))
-
-(defn decrypt-key-with-pw [ncryptsec pw]
-  (try
-    (js/NostrTools.nip49.decrypt ncryptsec pw)
-    (catch :default e
-      (js/console.error "Failed to decrypt key" e)
-      nil)))
-
-;; Components
-(defn loading-spinner []
-  [:div.loading [:div]])
-
-(defn video-item [{:keys [url viewed uuid event metadata]}]
+(defn component:video-item [{:keys [url viewed uuid event metadata]}]
   (js/console.log "video-item render" url viewed)
   (let [youtube-id (get-youtube-id url)
         thumbnail-url (get-thumbnail-url youtube-id)
@@ -221,7 +238,7 @@
        [:div.video-title title]
        [:div.video-controls
         [:button.icon-button
-         {:on-click #(toggle-viewed {:url url
+         {:on-click #(event:toggle-viewed {:url url
                                      :viewed viewed
                                      :uuid uuid
                                      :event event
@@ -252,7 +269,7 @@
               (swap! state assoc :loading? false))))
         100))))
 
-(defn url-input []
+(defn component:url-input []
   (let [input-value (r/atom "")]
     (fn []
       [:div.url-input
@@ -313,7 +330,7 @@
               (reset! decrypting-atom false))))
 
         ;; Handle nsec or other formats
-        (let [decoded (js/NostrTools.nip19.decode pasted-text)
+        (let [decoded (nostr-decode pasted-text)
               type (.-type decoded)
               data (.-data decoded)]
           (if (js/confirm "Are you sure you want to replace the private key?")
@@ -333,7 +350,7 @@
 (defn component:settings-nsec []
   (let [password (r/atom "")
         encrypting? (r/atom false)]
-    (fn [sk nsec]
+    (fn [sk]
       [:div.setting-group
        [:h3 "Account"]
        [:p "Your nsec is the key to access your account."]
@@ -355,7 +372,7 @@
                          (fn []
                            (p/let [result (if (seq @password)
                                             (encrypt-key-with-pw sk @password)
-                                            nsec)]
+                                            (nostr-encode-nsec sk))]
                              (js/console.log "encrypted" result)
                              (copy-to-clipboard result)
                              (js/alert (str (if (seq @password)
@@ -364,7 +381,7 @@
                                             " copied to clipboard!"))
                              (reset! encrypting? false))) 1))}
          (if @encrypting?
-           [loading-spinner]
+           [component:loading-spinner]
            "Copy")]]
        [:p
         "Restore a watch list or sync with a different device
@@ -372,10 +389,11 @@
        (let [decrypting? (r/atom false)]
          [:div
           (if @decrypting?
-            [loading-spinner]
+            [component:loading-spinner]
             [:input {:type "password"
                      :autocomplete "off"
-                     :placeholder "Paste nsec/ncrypt here to sync up another device."
+                     :placeholder "Paste nsec/ncrypt here
+                                  to sync up another device."
                      :on-paste (partial event:paste-nsec decrypting?)}])])])))
 
 (defn component:settings-sync [_state nsec pin-input show-qr]
@@ -413,27 +431,12 @@
        "Generate QR Code"]])])
 
 (defn component:settings-panel [state]
-  (let [sk (generate-or-load-keys)
-        nsec (js/NostrTools.nip19.nsecEncode sk)]
+  (let [sk (generate-or-load-keys)]
     [:div.settings-panel
      [:h2 "Settings"]
      #_ [component:settings-sync state nsec (r/atom "") (r/atom false)]
-     [component:settings-nsec sk nsec]
+     [component:settings-nsec sk]
      [component:settings-relays state]]))
-
-(defn check-url-params []
-  (let [url-params (js/URLSearchParams. (.-search js/window.location))
-        key-param (.get url-params "key")]
-    (when key-param
-      (let [pin (js/prompt "Enter PIN to decrypt key:")]
-        (when (and pin (not= pin ""))
-          (let [decrypted (decrypt-key-with-pw key-param pin)]
-            (when decrypted
-              (let [pk (js/NostrTools.getPublicKey decrypted)
-                    keys-obj #js {:sk decrypted :pk pk}]
-                (js/localStorage.setItem "nostr-key"
-                                         (js/JSON.stringify keys-obj))
-                (js/window.location.reload)))))))))
 
 (defn component:header [state]
   [:header
@@ -451,10 +454,10 @@
 
 (defn component:main-view [state]
   [:div.content
-   [url-input]
+   [component:url-input]
 
    (when (:loading? @state)
-     [loading-spinner])
+     [component:loading-spinner])
 
    (let [[unwatched watched]
          (->> (:videos @state)
@@ -473,7 +476,7 @@
         (doall
           (for [video unwatched]
             ^{:key (:url video)}
-            [video-item video]))]]
+            [component:video-item video]))]]
 
       (when (seq watched)
         [:div.videos-section
@@ -482,7 +485,7 @@
           (doall
             (for [video watched]
               ^{:key (:url video)}
-              [video-item video]))]])])])
+              [component:video-item video]))]])])])
 
 (defn app [state]
   [:<>
@@ -498,9 +501,26 @@
   (js/console.log
     (-> sk
         (pubkey)
-        js/NostrTools.nip19.npubEncode))
+        nostr-encode-npub))
   (swap! state assoc :sk sk)
   (check-url-params)
-  (subscribe-to-events (pubkey sk) (:relays @state))
+  (subscribe-to-events
+    (pubkey sk) (:relays @state)
+    ; event decrypted content received
+    (fn [decrypted-content event]
+      #(swap! state update :videos
+              (fn [videos]
+                (let [existing-index
+                      (first (keep-indexed
+                               (fn [idx v]
+                                 (when (= (:url v) (:url decrypted-content)) idx))
+                               videos))]
+                  (if existing-index
+                    (assoc-in videos [existing-index]
+                              (assoc decrypted-content :event event))
+                    (conj (or videos [])
+                          (assoc decrypted-content :event event)))))))
+    ; eose received
+    (js/console.log.bind js/console.log "EOSE"))
   (wait-for-preload)
   (rdom/render [app state] (.getElementById js/document "app")))
