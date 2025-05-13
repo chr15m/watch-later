@@ -12,7 +12,6 @@
     [promesa.core :as p]))
 
 ; TODO
-; - show help on the front page
 ; - save relay list to nostr
 ; - when the eye is clicked show a loading spinner in the button
 ; - make it an installable pwa
@@ -436,13 +435,35 @@
                              100)))))}
        "Generate QR Code"]])])
 
+(defn component:help []
+  [:section#help
+   [:p
+    "Watch Later is an online app for saving a list of YouTube videos "
+    "to watch later on."]
+   [:p "Simply paste a YouTube video URL in the input above to get started."]
+   [:h2 "Your 'watch list'"]
+   [:p
+    "Your list of videos is saved to servers called 'relays' on the "
+    [:a {:href "https://wikipedia.org/wiki/Nostr"
+         :target "_BLANK"} "Nostr network"] "."]
+   [:p
+    "You can access your private watch list from any device. A secret
+    'nsec' key has been created for you which secures access to your
+    encrypted watch list."]
+   [:p
+    "You can copy your nsec key from the settings page. "
+    "Keep a copy somewhere and you can use it to sync your list
+    to other devices."]])
+
 (defn component:settings-panel [state]
   (let [sk (:sk @state)]
     [:div.settings-panel
      [:h2 "Settings"]
      #_ [component:settings-sync state nsec (r/atom "") (r/atom false)]
      [component:settings-nsec sk]
-     [component:settings-relays state]]))
+     [component:settings-relays state]
+     [:h1 "About"]
+     [component:help]]))
 
 (defn component:header [state]
   [:header
@@ -462,11 +483,13 @@
   [:div.content
    [component:url-input]
 
-   (when (or (:loading? @state)
+   (if (or (:loading? @state)
              (and
                (nil? (:eose? @state))
                (not (:generated? @state))))
-     [component:loading-spinner])
+     [component:loading-spinner]
+     (when (empty? (:videos @state))
+       [component:help]))
 
    (let [[unwatched watched]
          (->> (:videos @state)
