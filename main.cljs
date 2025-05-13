@@ -11,6 +11,11 @@
     [reagent.dom :as rdom]
     [promesa.core :as p]))
 
+; TODO
+; - save relay list
+; - make it an installable pwa
+; - use the yt api to play in a modal, track playback, and store playback time
+
 ;; Constants
 (def app-name "cx.mccormick.watchlater")
 (def default-relays ["wss://relay.damus.io"
