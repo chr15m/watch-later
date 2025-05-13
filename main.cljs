@@ -14,8 +14,10 @@
 ; TODO
 ; - save relay list to nostr
 ; - when the eye is clicked show a loading spinner in the button
+; - fix the giant spinner when clicking a button
 ; - make it an installable pwa
 ; - work out a good set of default relays
+; - create a basic README
 
 ; TODO (stretch goals)
 ; - use the yt api to play in a modal, track playback, and store playback time
