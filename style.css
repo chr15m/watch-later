@@ -342,6 +342,7 @@ button i.icon > svg {
 row-group {
   display: flex;
   justify-content: end;
+  align-items: stretch;
   gap: 1em;
 }
 
@@ -460,12 +461,22 @@ row-group > * {
 
 .loading > div:first-child {
   animation: spin 0.33s linear infinite;
-  width: 48px;
-  height: 48px;
+  width: 2em;
+  height: 2em;
   border-radius: 24px;
   border: 3px solid transparent;
   border-left: 3px solid silver;
   border-right: 3px solid silver;
+}
+
+.loading[data-size="small"] {
+  margin: 0;
+  height: 100%;
+}
+
+.loading[data-size="small"] > div:first-child {
+  width: 1.5em;
+  height: 1.5em;
 }
 
 @keyframes spin {

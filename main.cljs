@@ -13,9 +13,6 @@
 
 ; TODO
 ; - save relay list to nostr
-; - when the eye is clicked show a loading spinner in the button
-; - when the ncrypt input is pasted show a loading spinner
-; - fix the giant spinner when clicking a button
 ; - work out a good set of default relays
 ; - create a basic README
 
@@ -211,11 +208,11 @@
 
 ;*** components and events ***;
 
-(defn component:loading-spinner []
-  [:div.loading [:div]])
+(defn component:loading-spinner [attrs]
+  [:div.loading attrs [:div]])
 
 (defn event:toggle-viewed [sk video]
-  (swap! state assoc :loading? true)
+  (swap! state assoc :loading? (:uuid video))
   (let [uuid (:uuid video)
         url (:url video)
         new-viewed (not (:viewed video))
@@ -249,10 +246,12 @@
                         :event event
                         :metadata metadata})
           :alt (if viewed "Viewed" "Mark as viewed")}
-         [icon
-          (if viewed
-            (load-icon "filled/eye.svg")
-            (load-icon "outline/eye.svg"))]]]]]]))
+         (if (= (:loading? @state) uuid)
+           [component:loading-spinner {:data-size "small"}]
+           [icon
+            (if viewed
+              (load-icon "filled/eye.svg")
+              (load-icon "outline/eye.svg"))])]]]]]))
 
 (defn event:pasted-url [state input-value ev]
   (let [pasted-text (.. ev -clipboardData (getData "text"))]
@@ -316,45 +315,49 @@
     (js/console.log "pasted-text" pasted-text)
     (.preventDefault ev)
     (reset! decrypting-atom true)
-    (try
-      (if (.startsWith pasted-text "ncryptsec")
-        ;; Handle ncryptsec directly
-        (when (js/confirm "Are you sure you want to replace the private key?")
-          (let [pw (js/prompt "Enter password to decrypt key:")]
-            (if (seq pw)
-              (p/do!
-                (p/delay 100) ;; Small delay to ensure UI updates
-                (let [decrypted (decrypt-key-with-pw pasted-text pw)]
-                  (if decrypted
-                    (do
-                      (set-key decrypted)
-                      (js/window.location.reload))
-                    (do
-                      (js/alert "Failed to decrypt with provided password")
-                      (reset! decrypting-atom false)))))
-              (reset! decrypting-atom false))))
+    (p/do!
+      ; allow atom swap time to update UI
+      (p/delay 1)
+      (try
+        (if (.startsWith pasted-text "ncryptsec")
+          ;; Handle ncryptsec directly
+          (when (js/confirm "Are you sure you want to replace the private key?")
+            (let [pw (js/prompt "Enter password to decrypt key:")]
+              (if (seq pw)
+                (p/do!
+                  (p/delay 100) ;; Small delay to ensure UI updates
+                  (let [decrypted (decrypt-key-with-pw pasted-text pw)]
+                    (if decrypted
+                      (do
+                        (set-key decrypted)
+                        (js/window.location.reload))
+                      (do
+                        (js/alert "Failed to decrypt with provided password")
+                        (reset! decrypting-atom false)))))
+                (reset! decrypting-atom false))))
 
-        ;; Handle nsec or other formats
-        (let [decoded (nostr-decode pasted-text)
-              type (.-type decoded)
-              data (.-data decoded)]
-          (if (js/confirm "Are you sure you want to replace the private key?")
-            (if (= type "nsec")
-              (do
-                (set-key data)
-                (js/window.location.reload))
-              (do
-                (js/alert "Invalid key format")
-                (reset! decrypting-atom false)))
-            (reset! decrypting-atom false))))
-      (catch :default e
-        (js/console.error "Error importing key" e)
-        (js/alert "Invalid key format")
-        (reset! decrypting-atom false)))))
+          ;; Handle nsec or other formats
+          (let [decoded (nostr-decode pasted-text)
+                type (.-type decoded)
+                data (.-data decoded)]
+            (if (js/confirm "Are you sure you want to replace the private key?")
+              (if (= type "nsec")
+                (do
+                  (set-key data)
+                  (js/window.location.reload))
+                (do
+                  (js/alert "Invalid key format")
+                  (reset! decrypting-atom false)))
+              (reset! decrypting-atom false))))
+        (catch :default e
+          (js/console.error "Error importing key" e)
+          (js/alert "Invalid key format")
+          (reset! decrypting-atom false))))))
 
 (defn component:settings-nsec []
   (let [password (r/atom "")
-        encrypting? (r/atom false)]
+        encrypting? (r/atom false)
+        decrypting? (r/atom false)]
     (fn [sk]
       [:div.setting-group
        [:h3 "Account"]
@@ -384,24 +387,25 @@
                                               "ncrypt"
                                               "nsec")
                                             " copied to clipboard!"))
+                             (reset! password "")
                              (reset! encrypting? false))) 1))}
+
          (if @encrypting?
-           [component:loading-spinner]
+           [component:loading-spinner {:data-size "small"}]
            "Copy")]]
        [:p
         "Restore a watch list or sync with a different device
         by pasting the nsec here:"]
-       (let [decrypting? (r/atom false)]
-         [:div
-          (if @decrypting?
-            [component:loading-spinner]
-            [:input {:autocomplete "off"
-                     :value ""
-                     :placeholder
-                     (str
-                       "Paste nsec/ncrypt here "
-                       "to sync up another device.")
-                     :on-paste (partial event:paste-nsec decrypting?)}])])])))
+       [:div
+        (if @decrypting?
+          [component:loading-spinner {:data-size "small"}]
+          [:input {:autocomplete "off"
+                   :value ""
+                   :placeholder
+                   (str
+                     "Paste nsec/ncrypt here "
+                     "to sync up another device.")
+                   :on-paste (partial event:paste-nsec decrypting?)}])]])))
 
 (defn component:settings-sync [_state nsec pin-input show-qr]
   [:div.setting-group
