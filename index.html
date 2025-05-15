@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
     <meta name="description" content="Online app to save a list of YouTube videos to watch later.">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/concrete.css@3.0.0/concrete.min.css">
     <link rel="stylesheet" href="style.css">
@@ -17,7 +20,7 @@
     <script src="https://cdn.jsdelivr.net/npm/nostr-tools@2.12.0/lib/nostr.bundle.min.js"></script>
     <!-- Import map to resolve bare specifiers -->
     <script type="importmap">
-       {
+      {
          "imports": {
            "@noble/hashes": "https://cdn.jsdelivr.net/npm/@noble/hashes@1.8.0/+esm",
            "@noble/hashes/scrypt": "https://cdn.jsdelivr.net/npm/@noble/hashes@1.8.0/esm/scrypt.js",
@@ -30,14 +33,17 @@
        }
     </script>
     <script
-      type="module"
-      src="https://cdn.jsdelivr.net/npm/nostr-tools@2.12.0/lib/esm/nip49.js"></script>
+        type="module"
+        src="https://cdn.jsdelivr.net/npm/nostr-tools@2.12.0/lib/esm/nip49.js"></script>
     <script type="module">
       import { encrypt, decrypt } from "https://cdn.jsdelivr.net/npm/nostr-tools@2.12.0/lib/esm/nip49.js";
       window.NostrTools.nip49 = {"encrypt": encrypt, "decrypt": decrypt};
     </script>
     <!-- <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script> -->
     <script type="application/x-scittle" src="https://cdn.jsdelivr.net/gh/chr15m/scittle-iconloader/iconloader.cljs"></script>
+    <script>
+      if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+    </script>
     <script type="application/x-scittle" src="main.cljs"></script>
   </head>
   <body>
