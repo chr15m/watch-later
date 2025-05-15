@@ -14,6 +14,7 @@
 ; TODO
 ; - save relay list to nostr
 ; - when the eye is clicked show a loading spinner in the button
+; - when the ncrypt input is pasted show a loading spinner
 ; - fix the giant spinner when clicking a button
 ; - make it an installable pwa
 ; - work out a good set of default relays
