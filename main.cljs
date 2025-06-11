@@ -66,8 +66,8 @@
       [decoded-sk false]
       [(set-key (js/NostrTools.generateSecretKey)) true])))
 
-(defn encrypt-content [sk pk content]
-  (js/NostrTools.nip04.encrypt sk pk (js/JSON.stringify (clj->js content))))
+(defn encrypt-content [sk content]
+  (js/NostrTools.nip04.encrypt sk (pubkey sk) (js/JSON.stringify (clj->js content))))
 
 (defn decrypt-content [sk pk encrypted-content]
   (try
@@ -77,16 +77,16 @@
       (js/console.error "Failed to decrypt content" e)
       nil)))
 
-(defn create-event [sk pk url viewed hash-fragment metadata & [existing-uuid]]
+(defn create-event [sk url viewed hash-fragment metadata & [existing-uuid]]
   (js/console.log "create-event"
-                  sk pk url viewed hash-fragment metadata existing-uuid)
+                  sk url viewed hash-fragment metadata existing-uuid)
   (let [uuid (or existing-uuid (str (random-uuid)))
         content {:uuid uuid
                  :url url
                  :useragent (.-userAgent js/navigator)
                  :viewed viewed
                  :metadata metadata}
-        encrypted-content (encrypt-content sk pk content)
+        encrypted-content (encrypt-content sk content)
         event-template
         #js {:kind nostr-kind
              :created_at (js/Math.floor (/ (js/Date.now) 1000))
@@ -218,7 +218,7 @@
         new-viewed (not (:viewed video))
         metadata (:metadata video)]
     (p/let [hash-fragment (hash-url url)
-            event (create-event sk (pubkey sk)
+            event (create-event sk
                                 url new-viewed hash-fragment metadata uuid)]
       (publish-event event (:relays @state))
       (swap! state assoc :loading? false))))
@@ -265,7 +265,7 @@
             (p/let [hash-fragment (hash-url pasted-text)
                     metadata (fetch-youtube-metadata youtube-id)
                     event (create-event
-                            sk (pubkey sk)
+                            sk
                             pasted-text false hash-fragment metadata)
                     published (publish-event event (:relays @state))]
               (js/console.log "published" published)
