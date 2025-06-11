@@ -19,6 +19,7 @@
 ; TODO (stretch goals)
 ; - use the yt api to play in a modal, track playback, and store playback time
 ; - cache stored events and only request since last posted
+; - use a different 300xx type than the example?
 
 ; immutable constant data
 
