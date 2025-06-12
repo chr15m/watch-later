@@ -444,6 +444,11 @@ row-group > * {
 
 .video-item .video-title {
   cursor: pointer;
+  flex: 1;
+}
+
+.video-item .video-controls {
+  flex: 0;
 }
 
 .video-item.viewed {
