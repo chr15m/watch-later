@@ -213,19 +213,6 @@
                                          (js/JSON.stringify keys-obj))
                 (js/window.location.reload)))))))))
 
-(defn toggle-viewed! [state sk video]
-  (swap! state assoc :loading? (:uuid video))
-  (let [uuid (:uuid video)
-        url (:url video)
-        new-viewed (not (:viewed video))
-        metadata (:metadata video)
-        playback-time (:playback-time video)]
-    (p/let [hash-fragment (hash-url url)
-            event (create-event sk
-                                url new-viewed hash-fragment metadata uuid playback-time)]
-      (publish-event event (:relays @state))
-      (swap! state assoc :loading? false))))
-
 (defn *publish-video-event! [state sk video & {:keys [viewed deleted]}]
   (let [uuid (:uuid video)
         url (:url video)
