@@ -15,9 +15,9 @@
 ; - save relay list to nostr
 ; - work out a good set of default relays
 ; - create a basic README
+; - delete button to remove a video
 
 ; TODO (stretch goals)
-; - use the yt api to play in a modal, track playback, and store playback time
 ; - cache stored events and only request since last posted
 ; - use a different 300xx type than the example?
 
@@ -41,7 +41,10 @@
                         :settings-open? false
                         :relays default-relays
                         :generated? nil
-                        :sk nil}))
+                        :sk nil
+                        :modal-video nil
+                        :player nil
+                        :playback-timer nil}))
 
 ;*** nostr functions ***;
 
@@ -78,15 +81,16 @@
       (js/console.error "Failed to decrypt content" e)
       nil)))
 
-(defn create-event [sk url viewed hash-fragment metadata & [existing-uuid]]
+(defn create-event [sk url viewed hash-fragment metadata & [existing-uuid playback-time]]
   (js/console.log "create-event"
-                  sk url viewed hash-fragment metadata existing-uuid)
+                  sk url viewed hash-fragment metadata existing-uuid playback-time)
   (let [uuid (or existing-uuid (str (random-uuid)))
         content {:uuid uuid
                  :url url
                  :useragent (.-userAgent js/navigator)
                  :viewed viewed
-                 :metadata metadata}
+                 :metadata metadata
+                 :playback-time (or playback-time 0)}
         encrypted-content (encrypt-content sk content)
         event-template
         #js {:kind nostr-kind
@@ -207,45 +211,152 @@
                                          (js/JSON.stringify keys-obj))
                 (js/window.location.reload)))))))))
 
-;*** components and events ***;
-
-(defn component:loading-spinner [attrs]
-  [:div.loading attrs [:div]])
-
-(defn event:toggle-viewed [sk video]
+(defn toggle-viewed! [state sk video]
   (swap! state assoc :loading? (:uuid video))
   (let [uuid (:uuid video)
         url (:url video)
         new-viewed (not (:viewed video))
-        metadata (:metadata video)]
+        metadata (:metadata video)
+        playback-time (:playback-time video)]
     (p/let [hash-fragment (hash-url url)
             event (create-event sk
-                                url new-viewed hash-fragment metadata uuid)]
+                                url new-viewed hash-fragment metadata uuid playback-time)]
       (publish-event event (:relays @state))
       (swap! state assoc :loading? false))))
 
-(defn component:video-item [sk {:keys [url viewed uuid event metadata]}]
+;*** player and modal functions ***;
+
+(defn save-playback-time [sk video current-time]
+  (when (and video current-time (> current-time 0))
+    (let [uuid (:uuid video)
+          url (:url video)
+          viewed (:viewed video)
+          metadata (:metadata video)]
+      (p/let [hash-fragment (hash-url url)
+              event (create-event sk url viewed hash-fragment metadata uuid current-time)]
+        (publish-event event (:relays @state))))))
+
+(defn setup-playback-tracking [sk video]
+  (when-let [timer (:playback-timer @state)]
+    (js/clearInterval timer))
+  (let [timer (js/setInterval
+                (fn []
+                  (when-let [player (:player @state)]
+                    (try
+                      (let [current-time (.getCurrentTime player)]
+                        (save-playback-time sk video current-time))
+                      (catch :default e
+                        (js/console.error "Error tracking playback" e)))))
+                10000)] ; Save every 10 seconds
+    (swap! state assoc :playback-timer timer)))
+
+(defn stop-playback-tracking []
+  (when-let [timer (:playback-timer @state)]
+    (js/clearInterval timer)
+    (swap! state assoc :playback-timer nil)))
+
+(defn on-player-state-change [sk video event]
+  (let [state-code (.-data event)]
+    (cond
+      ; Video ended (state 0)
+      (= state-code 0)
+      (do
+        (stop-playback-tracking)
+        ; Save final playback time and mark as viewed
+        (when-let [player (:player @state)]
+          (let [current-time (.getCurrentTime player)]
+            (save-playback-time sk video current-time)))
+        (toggle-viewed! state sk (assoc video :viewed false)) ; This will toggle to true
+        (swap! state assoc :modal-video nil :player nil))
+      
+      ; Video playing (state 1)
+      (= state-code 1)
+      (setup-playback-tracking sk video)
+      
+      ; Video paused or other states
+      :else
+      (stop-playback-tracking))))
+
+(defn on-player-ready [video event]
+  (let [player (.-target event)
+        start-time (or (:playback-time video) 0)]
+    (swap! state assoc :player player)
+    (when (> start-time 0)
+      (.seekTo player start-time true))))
+
+(defn create-youtube-player [youtube-id sk video]
+  (js/setTimeout
+    (fn []
+      (when js/window.YT
+        (js/window.YT.Player.
+          "youtube-player"
+          #js {:height "100%"
+               :width "100%"
+               :videoId youtube-id
+               :playerVars #js {:autoplay 1
+                                :controls 1
+                                :rel 0
+                                :modestbranding 1}
+               :events #js {:onReady #(on-player-ready video %)
+                            :onStateChange (partial on-player-state-change sk video)}})))
+    100))
+
+(defn event:open-video-modal [sk video]
+  (js/console.log "Opening video modal" (:url video))
+  (let [youtube-id (get-youtube-id (:url video))]
+    (js/console.log "YouTube ID:" youtube-id)
+    (swap! state assoc :modal-video video)
+    (create-youtube-player youtube-id sk video)))
+
+(defn event:close-video-modal []
+  ; Save current playback time before closing
+  (when-let [player (:player @state)]
+    (when-let [video (:modal-video @state)]
+      (try
+        (let [current-time (.getCurrentTime player)]
+          (save-playback-time (:sk @state) video current-time))
+        (catch :default e
+          (js/console.error "Error saving playback time on close" e)))))
+  (stop-playback-tracking)
+  (swap! state assoc :modal-video nil :player nil))
+
+;*** components and events ***;
+
+(defn component:video-modal []
+  (when (:modal-video @state)
+    [:div.modal-overlay
+     {:on-click #(when (= (.-target %) (.-currentTarget %))
+                   (event:close-video-modal))}
+     [:div.modal-content
+      [:button.modal-close
+       {:on-click event:close-video-modal}
+       [icon (load-icon "outline/x.svg")]]
+      [:div#youtube-player]]]))
+
+(defn component:loading-spinner [attrs]
+  [:div.loading attrs [:div]])
+
+(defn component:video-item [sk {:keys [url viewed uuid event metadata playback-time]}]
   (js/console.log "video-item render" url viewed)
   (let [youtube-id (get-youtube-id url)
         thumbnail-url (get-thumbnail-url youtube-id)
         title (if (and metadata (:title metadata))
                 (:title metadata)
-                "YouTube Video")]
+                "YouTube Video")
+        video-data {:url url :viewed viewed :uuid uuid :event event 
+                   :metadata metadata :playback-time (or playback-time 0)}]
     [:div.video-item {:class (when viewed "viewed")}
      [:div.thumbnail-container
-      [:a {:href url :target "_blank"}
+      [:div.clickable-area
+       {:on-click #(event:open-video-modal sk video-data)}
        [:img.thumbnail {:src thumbnail-url :alt "Video thumbnail"}]]
       [:row-group
-       [:div.video-title title]
+       [:div.video-title 
+        {:on-click #(event:open-video-modal sk video-data)}
+        title]
        [:div.video-controls
         [:button.icon-button
-         {:on-click #(event:toggle-viewed
-                       sk
-                       {:url url
-                        :viewed viewed
-                        :uuid uuid
-                        :event event
-                        :metadata metadata})
+         {:on-click #(toggle-viewed! state sk video-data)
           :alt (if viewed "Viewed" "Mark as viewed")}
          (if (= (:loading? @state) uuid)
            [component:loading-spinner {:data-size "small"}]
@@ -532,7 +643,8 @@
    [:main
     (if (:settings-open? @state)
       [component:settings-panel state]
-      [component:main-view state])]])
+      [component:main-view state])]
+   [component:video-modal]])
 
 ;*** launch ***;
 
