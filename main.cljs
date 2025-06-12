@@ -15,7 +15,8 @@
 ; - save relay list to nostr
 ; - work out a good set of default relays
 ; - create a basic README
-; - delete button to remove a video
+; - use kind:5 to actually delete from relays
+; - put 'watched' in a separate tab
 
 ; TODO (stretch goals)
 ; - cache stored events and only request since last posted
@@ -90,7 +91,8 @@
                  :useragent (.-userAgent js/navigator)
                  :viewed viewed
                  :metadata metadata
-                 :playback-time (or playback-time 0)}
+                 :playback-time (or playback-time 0)
+                 :deleted false}
         encrypted-content (encrypt-content sk content)
         event-template
         #js {:kind nostr-kind
@@ -222,6 +224,51 @@
             event (create-event sk
                                 url new-viewed hash-fragment metadata uuid playback-time)]
       (publish-event event (:relays @state))
+      (swap! state assoc :loading? false))))
+
+(defn *publish-video-event! [state sk video & {:keys [viewed deleted]}]
+  (let [uuid (:uuid video)
+        url (:url video)
+        metadata (:metadata video)
+        playback-time (:playback-time video)
+        new-viewed (if (some? viewed) viewed (:viewed video))
+        new-deleted (boolean deleted)]
+    (p/let [hash-fragment (hash-url url)
+            content (if new-deleted
+                      ; Minimal deletion event
+                      {:uuid uuid
+                       :url url
+                       :deleted true}
+                      ; Full video event
+                      {:uuid uuid
+                       :url url
+                       :useragent (.-userAgent js/navigator)
+                       :viewed new-viewed
+                       :metadata metadata
+                       :playback-time (or playback-time 0)
+                       :deleted false})
+            encrypted-content (encrypt-content sk content)
+            event-template
+            #js {:kind nostr-kind
+                 :created_at (js/Math.floor (/ (js/Date.now) 1000))
+                 :tags #js [#js ["d" (str app-name ":" uuid)]
+                            #js ["n" app-name]]
+                 :content encrypted-content}
+            event (js/NostrTools.finalizeEvent event-template sk)]
+      (publish-event event (:relays @state)))))
+
+(defn toggle-viewed! [state sk video]
+  (swap! state assoc :loading? (:uuid video))
+  (p/let [_ (*publish-video-event! state sk video :viewed (not (:viewed video)))]
+    (swap! state assoc :loading? false)))
+
+(defn event:delete-video! [state sk video]
+  (when (js/confirm "Are you sure you want to delete this video?")
+    (swap! state assoc :loading? (:uuid video))
+    (p/let [_ (*publish-video-event! state sk video :deleted true)]
+      (swap! state update :videos
+             (fn [videos]
+               (vec (remove #(= (:uuid %) (:uuid video)) videos))))
       (swap! state assoc :loading? false))))
 
 ;*** player and modal functions ***;
@@ -363,7 +410,11 @@
            [icon
             (if viewed
               (load-icon "filled/eye.svg")
-              (load-icon "outline/eye.svg"))])]]]]]))
+              (load-icon "outline/eye.svg"))])]
+        [:button.icon-button
+         {:on-click #(event:delete-video! state sk video-data)
+          :alt "Delete video"}
+         [icon (load-icon "outline/trash.svg")]]]]]]))
 
 (defn event:pasted-url [state input-value ev]
   (let [pasted-text (.. ev -clipboardData (getData "text"))]
@@ -668,11 +719,18 @@
                                (fn [idx v]
                                  (when (= (:url v) (:url decrypted-content)) idx))
                                videos))]
-                  (if existing-index
-                    (assoc-in videos [existing-index]
-                              (assoc decrypted-content :event event))
-                    (conj (or videos [])
-                          (assoc decrypted-content :event event)))))))
+                  (if (:deleted decrypted-content)
+                    ; Remove deleted videos
+                    (if existing-index
+                      (vec (concat (subvec videos 0 existing-index)
+                                   (subvec videos (inc existing-index))))
+                      videos)
+                    ; Add or update non-deleted videos
+                    (if existing-index
+                      (assoc-in videos [existing-index]
+                                (assoc decrypted-content :event event))
+                      (conj (or videos [])
+                            (assoc decrypted-content :event event))))))))
     ; eose received
     #(swap! state assoc :eose? true))
   (wait-for-preload)
