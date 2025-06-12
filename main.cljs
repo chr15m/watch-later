@@ -16,7 +16,6 @@
 ; - work out a good set of default relays
 ; - create a basic README
 ; - use kind:5 to actually delete from relays
-; - put 'watched' in a separate tab
 
 ; TODO (stretch goals)
 ; - cache stored events and only request since last posted
@@ -45,7 +44,8 @@
                         :sk nil
                         :modal-video nil
                         :player nil
-                        :playback-timer nil}))
+                        :playback-timer nil
+                        :active-tab :unwatched}))
 
 ;*** nostr functions ***;
 
@@ -220,8 +220,7 @@
         playback-time (:playback-time video)
         new-viewed (if (some? viewed) viewed (:viewed video))
         new-deleted (boolean deleted)]
-    (p/let [hash-fragment (hash-url url)
-            content (if new-deleted
+    (p/let [content (if new-deleted
                       ; Minimal deletion event
                       {:uuid uuid
                        :url url
@@ -635,9 +634,27 @@
         (load-icon "outline/x.svg")
         (load-icon "outline/settings.svg"))]]]])
 
+(defn component:tabs [state]
+  (let [unwatched-count (->> (:videos @state)
+                             (filter #(not (:viewed %)))
+                             count)
+        watched-count (->> (:videos @state)
+                           (filter :viewed)
+                           count)]
+    [:div.tabs
+     [:button.tab-button
+      {:class (when (= (:active-tab @state) :unwatched) "active")
+       :on-click #(swap! state assoc :active-tab :unwatched)}
+      "Queue" (when (> unwatched-count 0) (str " (" unwatched-count ")"))]
+     [:button.tab-button
+      {:class (when (= (:active-tab @state) :watched) "active")
+       :on-click #(swap! state assoc :active-tab :watched)}
+      "Watched" (when (> watched-count 0) (str " (" watched-count ")"))]]))
+
 (defn component:main-view [state]
   [:div.content
    [component:url-input]
+   [component:tabs state]
 
    (if (or (:loading? @state)
              (and
@@ -647,33 +664,26 @@
      (when (empty? (:videos @state))
        [component:help]))
 
-   (let [[unwatched watched]
-         (->> (:videos @state)
-              (group-by
-                :viewed)
-              (sort-by first)
-              (map second)
-              (map
-                #(sort-by
-                   (fn [video]
-                     (* -1 (aget (:event video)
-                                 "created_at"))) %)))]
+   (let [videos-by-viewed (->> (:videos @state)
+                               (group-by :viewed)
+                               (into {}))
+         unwatched (get videos-by-viewed false [])
+         watched (get videos-by-viewed true [])
+         sorted-unwatched (->> unwatched
+                               (sort-by #(* -1 (aget (:event %) "created_at"))))
+         sorted-watched (->> watched
+                             (sort-by #(* -1 (aget (:event %) "created_at"))))
+         current-videos (case (:active-tab @state)
+                          :unwatched sorted-unwatched
+                          :watched sorted-watched
+                          sorted-unwatched)]
      [:div.videos-container
       [:div.videos-section
        [:div.videos-list
         (doall
-          (for [video unwatched]
+          (for [video current-videos]
             ^{:key (:url video)}
-            [component:video-item (:sk @state) video]))]]
-
-      (when (seq watched)
-        [:div.videos-section
-         [:h3 "Watched"]
-         [:div.videos-list
-          (doall
-            (for [video watched]
-              ^{:key (:url video)}
-              [component:video-item (:sk @state) video]))]])])])
+            [component:video-item (:sk @state) video]))]]])])
 
 (defn app [state]
   [:<>
