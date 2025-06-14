@@ -12,12 +12,11 @@
     [promesa.core :as p]))
 
 ; TODO
-; - save relay list to nostr
 ; - work out a good set of default relays
 ; - create a basic README
-; - use kind:5 to actually delete from relays
 
 ; TODO (stretch goals)
+; - use kind:5 to actually delete from relays
 ; - cache stored events and only request since last posted
 ; - use a different 300xx type than the example?
 
@@ -45,7 +44,8 @@
                         :modal-video nil
                         :player nil
                         :playback-timer nil
-                        :active-tab :unwatched}))
+                        :active-tab :unwatched
+                        :last-settings-event-created-at nil}))
 
 ;*** nostr functions ***;
 
@@ -102,6 +102,21 @@
              :content encrypted-content}]
     (js/console.log "event-template" event-template)
     (js/console.log "content" (clj->js content))
+    (js/NostrTools.finalizeEvent event-template sk)))
+
+(defn create-settings-event [sk settings]
+  (js/console.log "create-settings-event" sk settings)
+  (let [content {:settings settings
+                 :useragent (.-userAgent js/navigator)}
+        encrypted-content (encrypt-content sk content)
+        event-template
+        #js {:kind nostr-kind
+             :created_at (js/Math.floor (/ (js/Date.now) 1000))
+             :tags #js [#js ["d" (str app-name ":settings")]
+                        #js ["n" app-name]]
+             :content encrypted-content}]
+    (js/console.log "settings-event-template" event-template)
+    (js/console.log "settings-content" (clj->js content))
     (js/NostrTools.finalizeEvent event-template sk)))
 
 (defn publish-event [event relays]
@@ -301,11 +316,11 @@
             (save-playback-time sk video current-time)))
         (toggle-viewed! state sk (assoc video :viewed false)) ; This will toggle to true
         (swap! state assoc :modal-video nil :player nil))
-      
+
       ; Video playing (state 1)
       (= state-code 1)
       (setup-playback-tracking sk video)
-      
+
       ; Video paused or other states
       :else
       (stop-playback-tracking))))
@@ -376,7 +391,7 @@
         title (if (and metadata (:title metadata))
                 (:title metadata)
                 "YouTube Video")
-        video-data {:url url :viewed viewed :uuid uuid :event event 
+        video-data {:url url :viewed viewed :uuid uuid :event event
                    :metadata metadata :playback-time (or playback-time 0)}]
     [:div.video-item {:class (when viewed "viewed")}
      [:div.thumbnail-container
@@ -384,7 +399,7 @@
        {:on-click #(event:open-video-modal sk video-data)}
        [:img.thumbnail {:src thumbnail-url :alt "Video thumbnail"}]]
       [:row-group
-       [:div.video-title 
+       [:div.video-title
         {:on-click #(event:open-video-modal sk video-data)}
         title]
        [:div.video-controls
@@ -654,7 +669,9 @@
 (defn component:main-view [state]
   [:div.content
    [component:url-input]
-   [component:tabs state]
+
+   (when (seq (:videos @state))
+     [component:tabs state])
 
    (if (or (:loading? @state)
              (and
@@ -696,6 +713,37 @@
 
 ;*** launch ***;
 
+(defn update-videos! [state decrypted-content event]
+  (swap! state update :videos
+         (fn [videos]
+           (let [existing-index
+                 (first (keep-indexed
+                          (fn [idx v]
+                            (when (= (:url v) (:url decrypted-content)) idx))
+                          videos))]
+             (if (:deleted decrypted-content)
+               ; Remove deleted videos
+               (if existing-index
+                 (vec (concat (subvec videos 0 existing-index)
+                              (subvec videos (inc existing-index))))
+                 videos)
+               ; Add or update non-deleted videos
+               (if existing-index
+                 (assoc-in videos [existing-index]
+                           (assoc decrypted-content :event event))
+                 (conj (or videos [])
+                       (assoc decrypted-content :event event))))))))
+
+(defn update-settings! [state decrypted-content event]
+  (let [settings-payload (:settings decrypted-content)
+        event-created-at (aget event "created_at")
+        last-processed-settings-at (or (:last-settings-event-created-at @state) 0)]
+    (when (> event-created-at last-processed-settings-at)
+      (js/console.log "Processing settings event:" event decrypted-content)
+      (when-let [new-relays (:relays settings-payload)]
+        (swap! state assoc :relays new-relays))
+      (swap! state assoc :last-settings-event-created-at event-created-at))))
+
 (p/let [[sk generated?] (generate-or-load-keys)]
   (js/console.log
     (-> sk
@@ -709,25 +757,13 @@
     sk (pubkey sk) (:relays @state)
     ; event decrypted content received
     (fn [decrypted-content event]
-      (swap! state update :videos
-              (fn [videos]
-                (let [existing-index
-                      (first (keep-indexed
-                               (fn [idx v]
-                                 (when (= (:url v) (:url decrypted-content)) idx))
-                               videos))]
-                  (if (:deleted decrypted-content)
-                    ; Remove deleted videos
-                    (if existing-index
-                      (vec (concat (subvec videos 0 existing-index)
-                                   (subvec videos (inc existing-index))))
-                      videos)
-                    ; Add or update non-deleted videos
-                    (if existing-index
-                      (assoc-in videos [existing-index]
-                                (assoc decrypted-content :event event))
-                      (conj (or videos [])
-                            (assoc decrypted-content :event event))))))))
+      (js/console.log "decrypted-content" decrypted-content)
+      (let [d-tag (some #(when (= (aget % 0) "d") (aget % 1))
+                        (.-tags event))]
+        ; triage settings versus video
+        (if (= d-tag (str app-name ":settings"))
+          (update-settings! state decrypted-content event)
+          (update-videos! state decrypted-content event))))
     ; eose received
     #(swap! state assoc :eose? true))
   (wait-for-preload)
