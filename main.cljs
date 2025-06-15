@@ -14,6 +14,7 @@
 ; TODO
 ; - work out a good set of default relays
 ; - create a basic README
+; - actually save the settings but not every keystroke
 
 ; TODO (stretch goals)
 ; - use kind:5 to actually delete from relays
@@ -72,7 +73,8 @@
       [(set-key (js/NostrTools.generateSecretKey)) true])))
 
 (defn encrypt-content [sk content]
-  (js/NostrTools.nip04.encrypt sk (pubkey sk) (js/JSON.stringify (clj->js content))))
+  (js/NostrTools.nip04.encrypt sk (pubkey sk)
+                               (js/JSON.stringify (clj->js content))))
 
 (defn decrypt-content [sk pk encrypted-content]
   (try
@@ -92,10 +94,12 @@
              :tags #js [#js ["d" (str app-name ":" d-identifier)]
                         #js ["n" app-name]]
              :content encrypted-content}]
-    (js/console.log "Constructed event-template for" d-identifier ":" event-template)
+    (js/console.log "Constructed event for"
+                    d-identifier ":" event-template)
     (js/NostrTools.finalizeEvent event-template sk)))
 
-(defn create-event [sk url viewed hash-fragment metadata & [existing-uuid playback-time]]
+(defn create-event [sk url viewed hash-fragment metadata
+                    & [existing-uuid playback-time]]
   (js/console.log "create-event called with url:" url
                   "viewed:" viewed
                   "hash-fragment:" hash-fragment
@@ -113,7 +117,8 @@
     (create-finalized-event sk video-content uuid)))
 
 (defn create-settings-event [sk settings]
-  (js/console.log "create-settings-event called with settings:" (clj->js settings))
+  (js/console.log "create-settings-event called with settings:"
+                  (clj->js settings))
   (let [settings-content {:settings settings
                           :useragent (.-userAgent js/navigator)}]
     (create-finalized-event sk settings-content "settings")))
@@ -280,7 +285,8 @@
           viewed (:viewed video)
           metadata (:metadata video)]
       (p/let [hash-fragment (hash-url url)
-              event (create-event sk url viewed hash-fragment metadata uuid current-time)]
+              event (create-event sk url viewed
+                                  hash-fragment metadata uuid current-time)]
         (publish-event event (:relays @state))))))
 
 (defn setup-playback-tracking [sk video]
@@ -313,7 +319,8 @@
         (when-let [player (:player @state)]
           (let [current-time (.getCurrentTime player)]
             (save-playback-time sk video current-time)))
-        (toggle-viewed! state sk (assoc video :viewed false)) ; This will toggle to true
+         ; This will toggle to true
+        (toggle-viewed! state sk (assoc video :viewed false))
         (swap! state assoc :modal-video nil :player nil))
 
       ; Video playing (state 1)
@@ -345,7 +352,8 @@
                                 :rel 0
                                 :modestbranding 1}
                :events #js {:onReady #(on-player-ready video %)
-                            :onStateChange (partial on-player-state-change sk video)}})))
+                            :onStateChange #(on-player-state-change
+                                              sk video %)}})))
     100))
 
 (defn event:open-video-modal [sk video]
@@ -383,7 +391,8 @@
 (defn component:loading-spinner [attrs]
   [:div.loading attrs [:div]])
 
-(defn component:video-item [sk {:keys [url viewed uuid event metadata playback-time]}]
+(defn component:video-item [sk {:keys [url viewed uuid event
+                                       metadata playback-time]}]
   (js/console.log "video-item render" url viewed)
   (let [youtube-id (get-youtube-id url)
         thumbnail-url (get-thumbnail-url youtube-id)
@@ -736,7 +745,8 @@
 (defn update-settings! [state decrypted-content event]
   (let [settings-payload (:settings decrypted-content)
         event-created-at (aget event "created_at")
-        last-processed-settings-at (or (:last-settings-event-created-at @state) 0)]
+        last-processed-settings-at (or (:last-settings-event-created-at @state)
+                                       0)]
     (when (> event-created-at last-processed-settings-at)
       (js/console.log "Processing settings event:" event decrypted-content)
       (when-let [new-relays (:relays settings-payload)]
