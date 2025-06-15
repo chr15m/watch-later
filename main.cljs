@@ -12,11 +12,13 @@
     [promesa.core :as p]))
 
 ; TODO
-; - work out a good set of default relays
-; - create a basic README
 ; - actually save the settings but not every keystroke
+; - save the video playback position locally frequently
+; - archiving after the playback is not working
+; - create a basic README
 
 ; TODO (stretch goals)
+; - work out a good set of default relays - randomize?
 ; - use kind:5 to actually delete from relays
 ; - cache stored events and only request since last posted
 ; - use a different 300xx type than the example?
@@ -400,7 +402,7 @@
                 (:title metadata)
                 "YouTube Video")
         video-data {:url url :viewed viewed :uuid uuid :event event
-                   :metadata metadata :playback-time (or playback-time 0)}]
+                    :metadata metadata :playback-time (or playback-time 0)}]
     [:div.video-item {:class (when viewed "viewed")}
      [:div.thumbnail-container
       [:div.clickable-area
