@@ -240,29 +240,22 @@
         metadata (:metadata video)
         playback-time (:playback-time video)
         new-viewed (if (some? viewed) viewed (:viewed video))
-        new-deleted (boolean deleted)]
-    (p/let [content (if new-deleted
-                      ; Minimal deletion event
-                      {:uuid uuid
-                       :url url
-                       :deleted true}
-                      ; Full video event
-                      {:uuid uuid
-                       :url url
-                       :useragent (.-userAgent js/navigator)
-                       :viewed new-viewed
-                       :metadata metadata
-                       :playback-time (or playback-time 0)
-                       :deleted false})
-            encrypted-content (encrypt-content sk content)
-            event-template
-            #js {:kind nostr-kind
-                 :created_at (js/Math.floor (/ (js/Date.now) 1000))
-                 :tags #js [#js ["d" (str app-name ":" uuid)]
-                            #js ["n" app-name]]
-                 :content encrypted-content}
-            event (js/NostrTools.finalizeEvent event-template sk)]
-      (publish-event event (:relays @state)))))
+        new-deleted (boolean deleted)
+        video-content (if new-deleted
+                        ; Minimal deletion event
+                        {:uuid uuid
+                         :url url
+                         :deleted true}
+                        ; Full video event
+                        {:uuid uuid
+                         :url url
+                         :useragent (.-userAgent js/navigator)
+                         :viewed new-viewed
+                         :metadata metadata
+                         :playback-time (or playback-time 0)
+                         :deleted false})
+        event (create-finalized-event sk video-content uuid)]
+    (publish-event event (:relays @state))))
 
 (defn toggle-viewed! [state sk video]
   (swap! state assoc :loading? (:uuid video))
@@ -282,14 +275,9 @@
 
 (defn save-playback-time [sk video current-time]
   (when (and video current-time (> current-time 0))
-    (let [uuid (:uuid video)
-          url (:url video)
-          viewed (:viewed video)
-          metadata (:metadata video)]
-      (p/let [hash-fragment (hash-url url)
-              event (create-event sk url viewed
-                                  hash-fragment metadata uuid current-time)]
-        (publish-event event (:relays @state))))))
+    (let [updated-video (assoc video :playback-time current-time)]
+      ;; *publish-video-event! takes state as its first argument
+      (*publish-video-event! state sk updated-video))))
 
 (defn setup-playback-tracking [sk video]
   (when-let [timer (:playback-timer @state)]
