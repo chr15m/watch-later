@@ -82,42 +82,41 @@
       (js/console.error "Failed to decrypt content" e)
       nil)))
 
-(defn create-event [sk url viewed hash-fragment metadata & [existing-uuid playback-time]]
-  (js/console.log "create-event"
-                  sk url viewed hash-fragment metadata existing-uuid playback-time)
-  (let [uuid (or existing-uuid (str (random-uuid)))
-        content {:uuid uuid
-                 :url url
-                 :useragent (.-userAgent js/navigator)
-                 :viewed viewed
-                 :metadata metadata
-                 :playback-time (or playback-time 0)
-                 :deleted false}
-        encrypted-content (encrypt-content sk content)
+(defn create-finalized-event [sk clj-content d-identifier]
+  (js/console.log "create-finalized-event called with d-identifier:" d-identifier
+                  "and content payload:" (clj->js clj-content))
+  (let [encrypted-content (encrypt-content sk clj-content)
         event-template
         #js {:kind nostr-kind
              :created_at (js/Math.floor (/ (js/Date.now) 1000))
-             :tags #js [#js ["d" (str app-name ":" uuid)]
+             :tags #js [#js ["d" (str app-name ":" d-identifier)]
                         #js ["n" app-name]]
              :content encrypted-content}]
-    (js/console.log "event-template" event-template)
-    (js/console.log "content" (clj->js content))
+    (js/console.log "Constructed event-template for" d-identifier ":" event-template)
     (js/NostrTools.finalizeEvent event-template sk)))
 
+(defn create-event [sk url viewed hash-fragment metadata & [existing-uuid playback-time]]
+  (js/console.log "create-event called with url:" url
+                  "viewed:" viewed
+                  "hash-fragment:" hash-fragment
+                  "metadata:" (clj->js metadata)
+                  "existing-uuid:" existing-uuid
+                  "playback-time:" playback-time)
+  (let [uuid (or existing-uuid (str (random-uuid)))
+        video-content {:uuid uuid
+                       :url url
+                       :useragent (.-userAgent js/navigator)
+                       :viewed viewed
+                       :metadata metadata
+                       :playback-time (or playback-time 0)
+                       :deleted false}]
+    (create-finalized-event sk video-content uuid)))
+
 (defn create-settings-event [sk settings]
-  (js/console.log "create-settings-event" sk settings)
-  (let [content {:settings settings
-                 :useragent (.-userAgent js/navigator)}
-        encrypted-content (encrypt-content sk content)
-        event-template
-        #js {:kind nostr-kind
-             :created_at (js/Math.floor (/ (js/Date.now) 1000))
-             :tags #js [#js ["d" (str app-name ":settings")]
-                        #js ["n" app-name]]
-             :content encrypted-content}]
-    (js/console.log "settings-event-template" event-template)
-    (js/console.log "settings-content" (clj->js content))
-    (js/NostrTools.finalizeEvent event-template sk)))
+  (js/console.log "create-settings-event called with settings:" (clj->js settings))
+  (let [settings-content {:settings settings
+                          :useragent (.-userAgent js/navigator)}]
+    (create-finalized-event sk settings-content "settings")))
 
 (defn publish-event [event relays]
   (js/console.log "publish-event" event relays)
@@ -295,7 +294,7 @@
                         (save-playback-time sk video current-time))
                       (catch :default e
                         (js/console.error "Error tracking playback" e)))))
-                10000)] ; Save every 10 seconds
+                30000)] ; Save every 30 seconds
     (swap! state assoc :playback-timer timer)))
 
 (defn stop-playback-tracking []
