@@ -100,24 +100,6 @@
                     d-identifier ":" event-template)
     (js/NostrTools.finalizeEvent event-template sk)))
 
-(defn create-event [sk url viewed hash-fragment metadata
-                    & [existing-uuid playback-time]]
-  (js/console.log "create-event called with url:" url
-                  "viewed:" viewed
-                  "hash-fragment:" hash-fragment
-                  "metadata:" (clj->js metadata)
-                  "existing-uuid:" existing-uuid
-                  "playback-time:" playback-time)
-  (let [uuid (or existing-uuid (str (random-uuid)))
-        video-content {:uuid uuid
-                       :url url
-                       :useragent (.-userAgent js/navigator)
-                       :viewed viewed
-                       :metadata metadata
-                       :playback-time (or playback-time 0)
-                       :deleted false}]
-    (create-finalized-event sk video-content uuid)))
-
 (defn create-settings-event [sk settings]
   (js/console.log "create-settings-event called with settings:"
                   (clj->js settings))
@@ -284,13 +266,11 @@
     (js/clearInterval timer))
   (let [timer (js/setInterval
                 (fn []
-                  (when-let [player (:player @state)]
-                    (try
-                      (let [current-time (.getCurrentTime player)]
-                        (save-playback-time sk video current-time))
-                      (catch :default e
-                        (js/console.error "Error tracking playback" e)))))
-                30000)] ; Save every 30 seconds
+                  (some->> @state
+                          :player
+                          .getCurrentTime
+                          (save-playback-time sk video)))
+                1000)]
     (swap! state assoc :playback-timer timer)))
 
 (defn stop-playback-tracking []
@@ -422,15 +402,17 @@
       (js/setTimeout
         (fn []
           (let [sk (:sk @state)
-                youtube-id (get-youtube-id pasted-text)]
+                youtube-id (get-youtube-id pasted-text)
+                new-uuid (str (random-uuid))]
             (swap! state assoc :loading? true)
-            (p/let [hash-fragment (hash-url pasted-text)
-                    metadata (fetch-youtube-metadata youtube-id)
-                    event (create-event
-                            sk
-                            pasted-text false hash-fragment metadata)
-                    published (publish-event event (:relays @state))]
-              (js/console.log "published" published)
+            (p/let [metadata (fetch-youtube-metadata youtube-id)
+                    video-data {:uuid new-uuid
+                                :url pasted-text
+                                :viewed false
+                                :metadata metadata
+                                :playback-time 0}
+                    published (*publish-video-event! state sk video-data)]
+              (js/console.log "published (from event:pasted-url)" published)
               (reset! input-value "")
               (swap! state assoc :loading? false))))
         100))))
