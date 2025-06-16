@@ -13,9 +13,10 @@
 
 ; TODO
 ; - actually save the settings but not every keystroke
-; - save the video playback position locally frequently
-; - archiving after the playback is not working
 ; - create a basic README
+
+; - inconsistent use of :url and :uuid for video uniqueness
+;   (probably use url hash)
 
 ; TODO (stretch goals)
 ; - work out a good set of default relays - randomize?
@@ -33,6 +34,8 @@
 (def localstorage-key
   "watch-later-nostr-key")
 (def nostr-kind 30078)
+
+(def playback-update-frequency 15000) ; 30 seconds
 
 ; mutable state data
 
@@ -215,11 +218,11 @@
                                          (js/JSON.stringify keys-obj))
                 (js/window.location.reload)))))))))
 
-(defn *publish-video-event! [state sk video & {:keys [viewed deleted]}]
+(defn *publish-video-event! [relays sk video & {:keys [viewed deleted]}]
   (let [uuid (:uuid video)
         url (:url video)
         metadata (:metadata video)
-        playback-time (:playback-time video)
+        playback (or (:playback video) {:time 0 :last-write 0})
         new-viewed (if (some? viewed) viewed (:viewed video))
         new-deleted (boolean deleted)
         video-content (if new-deleted
@@ -232,20 +235,20 @@
                          :url url
                          :viewed new-viewed
                          :metadata metadata
-                         :playback-time (or playback-time 0)
+                         :playback playback
                          :deleted false})
         event (create-finalized-event sk video-content uuid)]
-    (publish-event event (:relays @state))))
+    (publish-event event relays)))
 
 (defn toggle-viewed! [state sk video]
   (swap! state assoc :loading? (:uuid video))
-  (p/let [_ (*publish-video-event! state sk video :viewed (not (:viewed video)))]
+  (p/let [_ (*publish-video-event! (:relays @state) sk video :viewed (not (:viewed video)))]
     (swap! state assoc :loading? false)))
 
 (defn event:delete-video! [state sk video]
   (when (js/confirm "Are you sure you want to delete this video?")
     (swap! state assoc :loading? (:uuid video))
-    (p/let [_ (*publish-video-event! state sk video :deleted true)]
+    (p/let [_ (*publish-video-event! (:relays @state) sk video :deleted true)]
       (swap! state update :videos
              (fn [videos]
                (vec (remove #(= (:uuid %) (:uuid video)) videos))))
@@ -253,55 +256,79 @@
 
 ;*** player and modal functions ***;
 
-(defn save-playback-time [sk video current-time]
-  (when (and video current-time (> current-time 0))
-    (let [updated-video (assoc video :playback-time current-time)]
-      ;; *publish-video-event! takes state as its first argument
-      (*publish-video-event! state sk updated-video))))
+(defn replace-video [videos video]
+  (mapv
+    #(if (= (:uuid %)
+            (:uuid video))
+       video %)
+    videos))
 
-(defn setup-playback-tracking [sk video]
+(defn get-video [videos uuid]
+  (->> videos
+       (filter #(= uuid (:uuid %)))
+       first))
+
+(defn save-playback-time [sk video current-time & [force-network-write]]
+  (js/console.log "save-playback-time" (:uuid video))
+  ;(print video)
+  (when (and video current-time (> current-time 0))
+    (let [now (js/Date.now)
+          last-write (get-in video [:playback :last-write])
+          re-write? (or force-network-write
+                        (< last-write (- now playback-update-frequency)))
+          updated-video (update-in video [:playback] assoc
+                                   :time current-time
+                                   :last-write (if re-write? now last-write))]
+      ;(print "updated-video" updated-video) 
+      (swap! state update-in [:videos] replace-video updated-video)
+      (when re-write?
+        (js/console.log "save-playback-time network save")
+        (*publish-video-event! (:relays @state) sk updated-video)))))
+
+(defn setup-playback-tracking [state sk uuid]
   (when-let [timer (:playback-timer @state)]
     (js/clearInterval timer))
   (let [timer (js/setInterval
                 (fn []
                   (some->> @state
-                          :player
-                          .getCurrentTime
-                          (save-playback-time sk video)))
+                           :player
+                           .getCurrentTime
+                           (save-playback-time
+                             sk
+                             (get-video (:videos @state) uuid))))
                 1000)]
     (swap! state assoc :playback-timer timer)))
 
-(defn stop-playback-tracking []
+(defn stop-playback-tracking [state]
   (when-let [timer (:playback-timer @state)]
     (js/clearInterval timer)
     (swap! state assoc :playback-timer nil)))
 
-(defn on-player-state-change [sk video event]
+(defn on-player-state-change [state sk uuid event]
   (let [state-code (.-data event)]
     (cond
       ; Video ended (state 0)
       (= state-code 0)
-      (do
-        (stop-playback-tracking)
-        ; Save final playback time and mark as viewed
-        (when-let [player (:player @state)]
-          (let [current-time (.getCurrentTime player)]
-            (save-playback-time sk video current-time)))
-         ; This will toggle to true
-        (toggle-viewed! state sk (assoc video :viewed false))
+      (let [video (get-video (:videos @state) uuid)]
+        (stop-playback-tracking state)
+        ; Reset playback time and mark as viewed
+        (toggle-viewed! state sk
+                        (-> video
+                            (assoc-in [:playback :time] 0)
+                            (assoc :viewed false)))
         (swap! state assoc :modal-video nil :player nil))
 
       ; Video playing (state 1)
       (= state-code 1)
-      (setup-playback-tracking sk video)
+      (setup-playback-tracking state sk uuid)
 
       ; Video paused or other states
       :else
-      (stop-playback-tracking))))
+      (stop-playback-tracking state))))
 
 (defn on-player-ready [video event]
   (let [player (.-target event)
-        start-time (or (:playback-time video) 0)]
+        start-time (or (-> video :playback :time) 0)]
     (swap! state assoc :player player)
     (when (> start-time 0)
       (.seekTo player start-time true))))
@@ -321,7 +348,7 @@
                                 :modestbranding 1}
                :events #js {:onReady #(on-player-ready video %)
                             :onStateChange #(on-player-state-change
-                                              sk video %)}})))
+                                              state sk (:uuid video) %)}})))
     100))
 
 (defn event:open-video-modal [sk video]
@@ -334,13 +361,10 @@
 (defn event:close-video-modal []
   ; Save current playback time before closing
   (when-let [player (:player @state)]
-    (when-let [video (:modal-video @state)]
-      (try
-        (let [current-time (.getCurrentTime player)]
-          (save-playback-time (:sk @state) video current-time))
-        (catch :default e
-          (js/console.error "Error saving playback time on close" e)))))
-  (stop-playback-tracking)
+    (save-playback-time (:sk @state)
+                        (get-video (:videos @state)
+                                   (-> @state :modal-video :uuid)) (.getCurrentTime player) :force))
+  (stop-playback-tracking state)
   (swap! state assoc :modal-video nil :player nil))
 
 ;*** components and events ***;
@@ -360,15 +384,16 @@
   [:div.loading attrs [:div]])
 
 (defn component:video-item [sk {:keys [url viewed uuid event
-                                       metadata playback-time]}]
-  (js/console.log "video-item render" url viewed)
+                                       metadata playback]}]
+  ;(js/console.log "video-item render" url viewed)
   (let [youtube-id (get-youtube-id url)
         thumbnail-url (get-thumbnail-url youtube-id)
         title (if (and metadata (:title metadata))
                 (:title metadata)
                 "YouTube Video")
         video-data {:url url :viewed viewed :uuid uuid :event event
-                    :metadata metadata :playback-time (or playback-time 0)}]
+                    :metadata metadata
+                    :playback playback}]
     [:div.video-item {:class (when viewed "viewed")}
      [:div.thumbnail-container
       [:div.clickable-area
@@ -408,8 +433,10 @@
                                 :url pasted-text
                                 :viewed false
                                 :metadata metadata
-                                :playback-time 0}
-                    published (*publish-video-event! state sk video-data)]
+                                :playback
+                                {:time 0
+                                 :last-write 0}}
+                    published (*publish-video-event! (:relays @state) sk video-data)]
               (js/console.log "published (from event:pasted-url)" published)
               (reset! input-value "")
               (swap! state assoc :loading? false))))
@@ -697,7 +724,7 @@
            (let [existing-index
                  (first (keep-indexed
                           (fn [idx v]
-                            (when (= (:url v) (:url decrypted-content)) idx))
+                            (when (= (:uuid v) (:uuid decrypted-content)) idx))
                           videos))]
              (if (:deleted decrypted-content)
                ; Remove deleted videos
@@ -736,7 +763,7 @@
     sk (pubkey sk) (:relays @state)
     ; event decrypted content received
     (fn [decrypted-content event]
-      (js/console.log "decrypted-content" decrypted-content)
+      (print "decrypted-content" decrypted-content)
       (let [d-tag (some #(when (= (aget % 0) "d") (aget % 1))
                         (.-tags event))]
         ; triage settings versus video
