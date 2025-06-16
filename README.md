@@ -2,7 +2,7 @@
 
 Simple YouTube watch list app that syncs across devices using the Nostr network.
 
-![Watch Later Screenshot](screenshot.png)
+![Watch Later Screenshot](doc/screenshot.png)
 
 Open `index.html` in your browser to use it, or visit the live version at [mccormick.cx/apps/watch-later](https://mccormick.cx/apps/watch-later).
 
