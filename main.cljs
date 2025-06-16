@@ -12,8 +12,6 @@
     [promesa.core :as p]))
 
 ; TODO
-; - create a basic README
-
 ; - inconsistent use of :url and :uuid for video uniqueness
 ;   (probably use url hash)
 ; - work out a good set of default relays - randomize?
