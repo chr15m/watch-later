@@ -103,8 +103,7 @@
 (defn create-settings-event [sk settings]
   (js/console.log "create-settings-event called with settings:"
                   (clj->js settings))
-  (let [settings-content {:settings settings
-                          :useragent (.-userAgent js/navigator)}]
+  (let [settings-content {:settings settings}]
     (create-finalized-event sk settings-content "settings")))
 
 (defn publish-event [event relays]
@@ -231,7 +230,6 @@
                         ; Full video event
                         {:uuid uuid
                          :url url
-                         :useragent (.-userAgent js/navigator)
                          :viewed new-viewed
                          :metadata metadata
                          :playback-time (or playback-time 0)
