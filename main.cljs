@@ -12,13 +12,10 @@
     [promesa.core :as p]))
 
 ; TODO
-; - actually save the settings but not every keystroke
 ; - create a basic README
 
 ; - inconsistent use of :url and :uuid for video uniqueness
 ;   (probably use url hash)
-
-; TODO (stretch goals)
 ; - work out a good set of default relays - randomize?
 ; - use kind:5 to actually delete from relays
 ; - cache stored events and only request since last posted
@@ -114,6 +111,12 @@
   (p/let [pool (js/NostrTools.SimplePool.)
           published (js/Promise.any (.publish pool (clj->js relays) event))]
     published))
+
+(defn publish-settings! [*state]
+  (let [sk (:sk *state)
+        settings {:relays (:relays *state)}
+        event (create-settings-event sk settings)]
+    (publish-event event (:relays *state))))
 
 (defn subscribe-to-events [sk pk relays event-callback eose-callback]
   (let [pool (js/NostrTools.SimplePool.)
@@ -465,13 +468,17 @@
                :value relay
                :on-change #(swap! state assoc-in
                                   [:relays idx]
-                                  (.. % -target -value))}]
+                                  (.. % -target -value))
+               :on-blur #(publish-settings! @state)}]
       [:button.icon-button
-       {:on-click #(swap! state update :relays
-                          (fn [relays]
-                            (vec (concat
-                                  (subvec relays 0 idx)
-                                  (subvec relays (inc idx))))))
+       {:on-click #(when
+                     (js/confirm "Delete this relay?")
+                     (swap! state update :relays
+                            (fn [relays]
+                              (vec (concat
+                                     (subvec relays 0 idx)
+                                     (subvec relays (inc idx))))))
+                     (publish-settings! @state))
         :alt "Delete relay"}
        [icon (load-icon "outline/trash.svg")]]])
    [:button.button
@@ -647,7 +654,10 @@
      [icon (load-icon "filled/brand-youtube.svg")]
      "Watch Later"]
     [:button.icon-button
-     {:on-click #(swap! state update :settings-open? not)
+     {:on-click #(do
+                   (when (:settings-open? @state)
+                     (publish-settings! @state))
+                   (swap! state update :settings-open? not))
       :alt "Settings"}
      [icon
       (if (:settings-open? @state)
