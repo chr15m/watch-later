@@ -1,6 +1,6 @@
 # Watch Later
 
-Simple YouTube watch list app that syncs across devices using the Nostr network.
+Simple YouTube watch list app that syncs across devices using the Nostr network. No YouTube login required.
 
 ![Watch Later Screenshot](doc/screenshot.png)
 
