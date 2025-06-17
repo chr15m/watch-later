@@ -219,41 +219,32 @@
                                          (js/JSON.stringify keys-obj))
                 (js/window.location.reload)))))))))
 
-(defn *publish-video-event! [relays sk video & {:keys [viewed deleted]}]
-  (let [uuid (:uuid video)
-        url (:url video)
-        metadata (:metadata video)
-        playback (or (:playback video) {:time 0 :last-write 0})
-        new-viewed (if (some? viewed) viewed (:viewed video))
-        new-deleted (boolean deleted)
-        video-content (if new-deleted
-                        ; Minimal deletion event
+(defn *publish-video-event! [relays sk {:keys [url uuid] :as video} & {:keys [delete]}]
+  (let [video-content (if delete
                         {:uuid uuid
                          :url url
                          :deleted true}
-                        ; Full video event
-                        {:uuid uuid
-                         :url url
-                         :viewed new-viewed
-                         :metadata metadata
-                         :playback playback
-                         :deleted false})
+                        video)
         event (create-finalized-event sk video-content uuid)]
     (publish-event event relays)))
 
 (defn toggle-viewed! [state sk video]
   (swap! state assoc :loading? (:uuid video))
-  (p/let [_ (*publish-video-event! (:relays @state) sk video :viewed (not (:viewed video)))]
+  (p/let [_ (*publish-video-event! (:relays @state) sk (update video :viewed not))]
     (swap! state assoc :loading? false)))
 
 (defn event:delete-video! [state sk video]
   (when (js/confirm "Are you sure you want to delete this video?")
     (swap! state assoc :loading? (:uuid video))
-    (p/let [_ (*publish-video-event! (:relays @state) sk video :deleted true)]
-      (swap! state update :videos
-             (fn [videos]
-               (vec (remove #(= (:uuid %) (:uuid video)) videos))))
-      (swap! state assoc :loading? false))))
+    (p/do!
+      (*publish-video-event! (:relays @state) sk video :delete true)
+      (swap! state
+             (fn [*state]
+               (-> *state
+                   (update :videos
+                           (fn [videos]
+                             (vec (remove #(= (:uuid %) (:uuid video)) videos))))
+                   (assoc :loading? false)))))))
 
 ;*** player and modal functions ***;
 
