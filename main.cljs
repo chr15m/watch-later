@@ -23,7 +23,8 @@
 
 (def app-name "cx.mccormick.watchlater")
 (def default-relays ["wss://relay.damus.io"
-                     "wss://relay.nostr.band"])
+                     "wss://nostr.wine"
+                     "wss://nos.lol"])
 (def icon-url
   "https://cdn.jsdelivr.net/npm/@tabler/icons@3.31.0/icons/")
 (def localstorage-key
