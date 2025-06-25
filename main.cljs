@@ -123,9 +123,11 @@
 
 (defn publish-settings! [*state]
   (let [sk (:sk *state)
-        settings {:relays (:relays *state)}
+        relays (map str (:relays *state))
+        settings {:relays (when (not= (set relays) (set (map str default-relays)))
+                            relays)}
         event (create-settings-event sk settings)]
-    (publish-event event (:relays *state))))
+    (publish-event event relays)))
 
 (defn subscribe-to-events [*state sk relays event-callback eose-callback]
   (let [pk (pubkey sk)
@@ -190,8 +192,8 @@
                                        0)]
     (when (> event-created-at last-processed-settings-at)
       (js/console.log "Processing settings event:" event decrypted-content)
-      (when-let [new-relays (:relays settings-payload)]
-        (swap! state assoc :relays new-relays))
+      (when (contains? settings-payload :relays)
+        (swap! state assoc :relays (or (:relays settings-payload) default-relays)))
       (swap! state assoc :last-settings-event-created-at event-created-at))))
 
 (defn event-received
