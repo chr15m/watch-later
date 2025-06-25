@@ -76,8 +76,12 @@
       [(set-key (js/NostrTools.generateSecretKey)) true])))
 
 (defn encrypt-content [sk content]
-  (js/NostrTools.nip04.encrypt sk (pubkey sk)
-                               (js/JSON.stringify (clj->js content))))
+  (let [content-string
+        (-> content
+            (dissoc :event)
+            clj->js
+            js/JSON.stringify)]
+    (js/NostrTools.nip04.encrypt sk (pubkey sk) content-string)))
 
 (defn decrypt-content [sk pk encrypted-content]
   (try
