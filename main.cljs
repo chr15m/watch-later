@@ -123,14 +123,15 @@
         event (create-settings-event sk settings)]
     (publish-event event (:relays *state))))
 
-(defn subscribe-to-events [sk pk relays event-callback eose-callback]
-  (let [pool (:pool @state)
-        sub (.subscribeMany
+(defn subscribe-to-events [*state sk relays event-callback eose-callback]
+  (let [pk (pubkey sk)
+        pool (:pool *state)
+        sub (.subscribe
               pool
               (clj->js relays)
-              (clj->js [{:kinds [nostr-kind]
-                         :authors [pk]
-                         :#n [app-name]}])
+              (clj->js {:kinds [nostr-kind]
+                        :authors [pk]
+                        :#n [app-name]})
               (clj->js {:onevent
                         (fn [event]
                           (let [decrypted-content
@@ -140,7 +141,7 @@
                             (when decrypted-content
                               (event-callback decrypted-content event))))
                         :oneose eose-callback}))]
-    sub))
+    (assoc *state :subscription sub)))
 
 (defn encrypt-key-with-pw [sk pw]
   (try
@@ -156,7 +157,7 @@
       (js/console.error "Failed to decrypt key" e)
       nil)))
 
-(defn update-connected-relays-count! [state]
+(defn check-connected-relays! [state]
   (when-let [pool (:pool @state)]
     (let [statuses (.listConnectionStatus pool)
           connected-count (->> statuses
@@ -776,24 +777,28 @@
     (-> sk
         (pubkey)
         nostr-encode-npub))
-  (swap! state assoc
-         :sk sk
-         :generated? generated?
-         :pool (js/NostrTools.SimplePool.))
+  (let [pool (js/NostrTools.SimplePool.)]
+    (swap! state
+           (fn [*state]
+             (-> *state
+                 (assoc
+                   :sk sk
+                   :generated? generated?
+                   :pool pool)
+                 (subscribe-to-events
+                   sk (:relays @state)
+                   ; event decrypted content received
+                   (fn [decrypted-content event]
+                     (print "decrypted-content" decrypted-content)
+                     (let [d-tag (some #(when (= (aget % 0) "d") (aget % 1))
+                                       (.-tags event))]
+                       ; triage settings versus video
+                       (if (= d-tag (str app-name ":settings"))
+                         (update-settings! state decrypted-content event)
+                         (update-videos! state decrypted-content event))))
+                   ; eose received
+                   #(swap! state assoc :eose? true))))))
   (check-url-params)
-  (subscribe-to-events
-    sk (pubkey sk) (:relays @state)
-    ; event decrypted content received
-    (fn [decrypted-content event]
-      (print "decrypted-content" decrypted-content)
-      (let [d-tag (some #(when (= (aget % 0) "d") (aget % 1))
-                        (.-tags event))]
-        ; triage settings versus video
-        (if (= d-tag (str app-name ":settings"))
-          (update-settings! state decrypted-content event)
-          (update-videos! state decrypted-content event))))
-    ; eose received
-    #(swap! state assoc :eose? true))
-  (js/setInterval #(update-connected-relays-count! state) 1000)
+  (js/setInterval #(check-connected-relays! state) 1000)
   (wait-for-preload)
   (rdom/render [app state] (.getElementById js/document "app")))
