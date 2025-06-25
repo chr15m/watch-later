@@ -772,6 +772,16 @@
         (swap! state assoc :relays new-relays))
       (swap! state assoc :last-settings-event-created-at event-created-at))))
 
+(defn event-received
+  [decrypted-content event]
+  (print "decrypted-content" decrypted-content)
+  (let [d-tag (some #(when (= (aget % 0) "d") (aget % 1))
+                    (.-tags event))]
+    ; triage settings versus video
+    (if (= d-tag (str app-name ":settings"))
+      (update-settings! state decrypted-content event)
+      (update-videos! state decrypted-content event))))
+
 (p/let [[sk generated?] (generate-or-load-keys)]
   (js/console.log
     (-> sk
@@ -788,14 +798,7 @@
                  (subscribe-to-events
                    sk (:relays @state)
                    ; event decrypted content received
-                   (fn [decrypted-content event]
-                     (print "decrypted-content" decrypted-content)
-                     (let [d-tag (some #(when (= (aget % 0) "d") (aget % 1))
-                                       (.-tags event))]
-                       ; triage settings versus video
-                       (if (= d-tag (str app-name ":settings"))
-                         (update-settings! state decrypted-content event)
-                         (update-videos! state decrypted-content event))))
+                   #(event-received %1 %2)
                    ; eose received
                    #(swap! state assoc :eose? true))))))
   (check-url-params)
