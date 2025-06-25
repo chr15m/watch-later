@@ -29,6 +29,7 @@
   "https://cdn.jsdelivr.net/npm/@tabler/icons@3.31.0/icons/")
 (def localstorage-key
   "watch-later-nostr-key")
+(def localstorage-relays-key "watch-later-relays")
 (def nostr-kind 30078)
 
 (def playback-update-frequency 15000) ; 30 seconds
@@ -127,6 +128,9 @@
         settings {:relays (when (not= (set relays) (set (map str default-relays)))
                             relays)}
         event (create-settings-event sk settings)]
+    (if (:relays settings)
+      (js/localStorage.setItem localstorage-relays-key (js/JSON.stringify (clj->js relays)))
+      (js/localStorage.removeItem localstorage-relays-key))
     (publish-event event relays)))
 
 (defn subscribe-to-events [*state sk relays event-callback eose-callback]
@@ -818,6 +822,9 @@
 ;*** launch ***;
 
 (p/let [[sk generated?] (generate-or-load-keys)]
+  (let [stored-relays (js/localStorage.getItem localstorage-relays-key)]
+    (when stored-relays
+      (swap! state assoc :relays (js->clj (js/JSON.parse stored-relays)))))
   (js/console.log
     (-> sk
         (pubkey)
