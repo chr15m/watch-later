@@ -114,7 +114,7 @@
 (defn publish-event [event relays]
   (js/console.log "publish-event" event relays)
   (p/let [pool (:pool @state)
-          published (js/Promise.any (.publish pool (clj->js relays) event))]
+          published (js/Promise.allSettled (.publish pool (clj->js relays) event))]
     published))
 
 (defn publish-settings! [*state]
