@@ -47,7 +47,9 @@
                         :player nil
                         :playback-timer nil
                         :active-tab :unwatched
-                        :last-settings-event-created-at nil}))
+                        :last-settings-event-created-at nil
+                        :pool nil
+                        :connected-relays 0}))
 
 ;*** nostr functions ***;
 
@@ -107,7 +109,7 @@
 
 (defn publish-event [event relays]
   (js/console.log "publish-event" event relays)
-  (p/let [pool (js/NostrTools.SimplePool.)
+  (p/let [pool (:pool @state)
           published (js/Promise.any (.publish pool (clj->js relays) event))]
     published))
 
@@ -118,7 +120,7 @@
     (publish-event event (:relays *state))))
 
 (defn subscribe-to-events [sk pk relays event-callback eose-callback]
-  (let [pool (js/NostrTools.SimplePool.)
+  (let [pool (:pool @state)
         sub (.subscribeMany
               pool
               (clj->js relays)
@@ -149,6 +151,17 @@
     (catch :default e
       (js/console.error "Failed to decrypt key" e)
       nil)))
+
+(defn update-connected-relays-count! [state]
+  (when-let [pool (:pool @state)]
+    (let [statuses (.listConnectionStatus pool)
+          connected-count (->> statuses
+                               js/Object.fromEntries
+                               (js->clj)
+                               (vals)
+                               (filter true?)
+                               count)]
+      (swap! state assoc :connected-relays connected-count))))
 
 (def nostr-decode js/NostrTools.nip19.decode)
 
@@ -643,16 +656,20 @@
     [:h1
      [icon (load-icon "filled/brand-youtube.svg")]
      "Watch Later"]
-    [:button.icon-button
-     {:on-click #(do
-                   (when (:settings-open? @state)
-                     (publish-settings! @state))
-                   (swap! state update :settings-open? not))
-      :alt "Settings"}
-     [icon
-      (if (:settings-open? @state)
-        (load-icon "outline/x.svg")
-        (load-icon "outline/settings.svg"))]]]])
+    [:div {:style {:display "flex" :align-items "center" :gap "8px"}}
+     (let [connected-count (:connected-relays @state)
+           total-relays (count (:relays @state))]
+       [:span (str connected-count "/" total-relays)])
+     [:button.icon-button
+      {:on-click #(do
+                    (when (:settings-open? @state)
+                      (publish-settings! @state))
+                    (swap! state update :settings-open? not))
+       :alt "Settings"}
+      [icon
+       (if (:settings-open? @state)
+         (load-icon "outline/x.svg")
+         (load-icon "outline/settings.svg"))]]]]])
 
 (defn component:tabs [state]
   (let [unwatched-count (->> (:videos @state)
@@ -757,7 +774,8 @@
         nostr-encode-npub))
   (swap! state assoc
          :sk sk
-         :generated? generated?)
+         :generated? generated?
+         :pool (js/NostrTools.SimplePool.))
   (check-url-params)
   (subscribe-to-events
     sk (pubkey sk) (:relays @state)
@@ -772,5 +790,6 @@
           (update-videos! state decrypted-content event))))
     ; eose received
     #(swap! state assoc :eose? true))
+  (js/setInterval #(update-connected-relays-count! state) 1000)
   (wait-for-preload)
   (rdom/render [app state] (.getElementById js/document "app")))
