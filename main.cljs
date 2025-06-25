@@ -33,6 +33,8 @@
 
 (def playback-update-frequency 15000) ; 30 seconds
 
+(def resubscribe-backoff [10 10 10 20 20 30 60])
+
 ; mutable state data
 
 (set-svg-base-url icon-url)
@@ -46,10 +48,12 @@
                         :modal-video nil
                         :player nil
                         :playback-timer nil
+                        :subscription nil
                         :active-tab :unwatched
                         :last-settings-event-created-at nil
                         :pool nil
-                        :connected-relays 0}))
+                        :connected-relays 0
+                        :reconnect nil}))
 
 ;*** nostr functions ***;
 
@@ -157,6 +161,73 @@
       (js/console.error "Failed to decrypt key" e)
       nil)))
 
+
+(defn update-videos! [state decrypted-content event]
+  (swap! state update :videos
+         (fn [videos]
+           (let [existing-index
+                 (first (keep-indexed
+                          (fn [idx v]
+                            (when (= (:uuid v) (:uuid decrypted-content)) idx))
+                          videos))]
+             (if (:deleted decrypted-content)
+               ; Remove deleted videos
+               (if existing-index
+                 (vec (concat (subvec videos 0 existing-index)
+                              (subvec videos (inc existing-index))))
+                 videos)
+               ; Add or update non-deleted videos
+               (if existing-index
+                 (assoc-in videos [existing-index]
+                           (assoc decrypted-content :event event))
+                 (conj (or videos [])
+                       (assoc decrypted-content :event event))))))))
+
+(defn update-settings! [state decrypted-content event]
+  (let [settings-payload (:settings decrypted-content)
+        event-created-at (aget event "created_at")
+        last-processed-settings-at (or (:last-settings-event-created-at @state)
+                                       0)]
+    (when (> event-created-at last-processed-settings-at)
+      (js/console.log "Processing settings event:" event decrypted-content)
+      (when-let [new-relays (:relays settings-payload)]
+        (swap! state assoc :relays new-relays))
+      (swap! state assoc :last-settings-event-created-at event-created-at))))
+
+(defn event-received
+  [decrypted-content event]
+  (print "decrypted-content" decrypted-content)
+  (let [d-tag (some #(when (= (aget % 0) "d") (aget % 1))
+                    (.-tags event))]
+    ; triage settings versus video
+    (if (= d-tag (str app-name ":settings"))
+      (update-settings! state decrypted-content event)
+      (update-videos! state decrypted-content event))))
+
+
+(defn auto-reconnect [*state connected-count]
+  (if
+    (> connected-count 0)
+    (assoc *state :reconnect nil)
+    (if-let [[backoff-idx last-attempt-ms] (:reconnect *state)]
+      (let [delay-s (nth resubscribe-backoff backoff-idx)]
+        (if (> (js/Date.now) (+ last-attempt-ms (* delay-s 1000)))
+          (do
+            (js/console.log "Attempting to reconnect to relays...")
+            (let [sk (:sk *state)
+                  relays (:relays *state)
+                  next-idx (min (inc backoff-idx) (dec (count resubscribe-backoff)))]
+              (-> *state
+                  (subscribe-to-events
+                    sk relays
+                    #(event-received %1 %2)
+                    #(swap! state assoc :eose? true))
+                  (assoc :reconnect [next-idx (js/Date.now)]))))
+          *state))
+      (do
+        (js/console.log "Connection to relays lost. Scheduling reconnect.")
+        (assoc *state :reconnect [0 (js/Date.now)])))))
+
 (defn check-connected-relays! [state]
   (when-let [pool (:pool @state)]
     (let [statuses (.listConnectionStatus pool)
@@ -166,7 +237,11 @@
                                (vals)
                                (filter true?)
                                count)]
-      (swap! state assoc :connected-relays connected-count))))
+      (swap! state
+             (fn [*state]
+               (-> *state
+                   (assoc :connected-relays connected-count)
+                   (auto-reconnect connected-count)))))))
 
 (def nostr-decode js/NostrTools.nip19.decode)
 
@@ -290,7 +365,7 @@
           updated-video (update-in video [:playback] assoc
                                    :time current-time
                                    :last-write (if re-write? now last-write))]
-      ;(print "updated-video" updated-video) 
+      ;(print "updated-video" updated-video)
       (swap! state update-in [:videos] replace-video updated-video)
       (when re-write?
         (js/console.log "save-playback-time network save")
@@ -739,48 +814,6 @@
    [component:video-modal]])
 
 ;*** launch ***;
-
-(defn update-videos! [state decrypted-content event]
-  (swap! state update :videos
-         (fn [videos]
-           (let [existing-index
-                 (first (keep-indexed
-                          (fn [idx v]
-                            (when (= (:uuid v) (:uuid decrypted-content)) idx))
-                          videos))]
-             (if (:deleted decrypted-content)
-               ; Remove deleted videos
-               (if existing-index
-                 (vec (concat (subvec videos 0 existing-index)
-                              (subvec videos (inc existing-index))))
-                 videos)
-               ; Add or update non-deleted videos
-               (if existing-index
-                 (assoc-in videos [existing-index]
-                           (assoc decrypted-content :event event))
-                 (conj (or videos [])
-                       (assoc decrypted-content :event event))))))))
-
-(defn update-settings! [state decrypted-content event]
-  (let [settings-payload (:settings decrypted-content)
-        event-created-at (aget event "created_at")
-        last-processed-settings-at (or (:last-settings-event-created-at @state)
-                                       0)]
-    (when (> event-created-at last-processed-settings-at)
-      (js/console.log "Processing settings event:" event decrypted-content)
-      (when-let [new-relays (:relays settings-payload)]
-        (swap! state assoc :relays new-relays))
-      (swap! state assoc :last-settings-event-created-at event-created-at))))
-
-(defn event-received
-  [decrypted-content event]
-  (print "decrypted-content" decrypted-content)
-  (let [d-tag (some #(when (= (aget % 0) "d") (aget % 1))
-                    (.-tags event))]
-    ; triage settings versus video
-    (if (= d-tag (str app-name ":settings"))
-      (update-settings! state decrypted-content event)
-      (update-videos! state decrypted-content event))))
 
 (p/let [[sk generated?] (generate-or-load-keys)]
   (js/console.log
