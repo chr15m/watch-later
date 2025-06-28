@@ -757,6 +757,14 @@
          (load-icon "outline/x.svg")
          (load-icon "outline/settings.svg"))]]]]])
 
+(defn component:footer [_state]
+  [:footer
+   [:p "Copyright " (-> (js/Date.) (.getFullYear)) " "
+    [:a {:href "https://mccormick.cx/"}
+     "Chris McCormick"]]
+   [:p [:a {:href "https://github.com/chr15m/watch-later"}
+        "Download the source for self-hosting."]]])
+
 (defn component:tabs [state]
   (let [unwatched-count (->> (:videos @state)
                              (filter #(not (:viewed %)))
@@ -817,6 +825,7 @@
     (if (:settings-open? @state)
       [component:settings-panel state]
       [component:main-view state])]
+   [component:footer state]
    [component:video-modal]])
 
 ;*** launch ***;

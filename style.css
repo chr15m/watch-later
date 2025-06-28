@@ -44,11 +44,6 @@ body {
   padding: 1em;
 }
 
-footer {
-  text-align: center;
-  padding: 2em 0px;
-}
-
 html, body, #app {
   min-height: 100%;
   height: 100%;
@@ -63,6 +58,17 @@ html, body, #app {
 
 a {
   color: var(--fg);
+}
+
+footer {
+  text-align: center;
+  padding: 2em 0px;
+  color: var(--shade);
+  font-size: 0.75em;
+}
+
+footer a {
+  color: var(--shade);
 }
 
 figure {
