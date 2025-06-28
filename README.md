@@ -8,6 +8,8 @@ Open `index.html` in your browser to use it, or visit the live version at [mccor
 
 [Download a zip containing the web app](https://github.com/chr15m/watch-later/archive/refs/heads/main.zip) to self-host.
 
+[Features](#features) | [Usage](#usage) | [Self-Hosting](#self-hosting) | [How It Works](#how-it-works) | [Technology](#technology) | [License](#license)
+
 ## Features
 
 - **YouTube Integration**: Paste YouTube URLs to add videos to your watch list
@@ -26,13 +28,11 @@ Open `index.html` in your browser to use it, or visit the live version at [mccor
 - Access settings to manage Nostr relays and backup your key
 - Your nsec key can be copied to sync with other devices
 
-## Technology
+## Self-Hosting
 
-- [Scittle ClojureScript](https://github.com/babashka/scittle/)
-- [Reagent](https://reagent-project.github.io/) for React-style UI
-- [Nostr Tools](https://github.com/nbd-wtf/nostr-tools) for decentralized sync
-- [YouTube Player API](https://developers.google.com/youtube/iframe_api_reference) for video playback
-- [Promesa](https://github.com/funcool/promesa) for async operations
+Watch Later is a static web application that can be hosted on any web server or static hosting provider (like GitHub Pages, Netlify, or Vercel). No backend or build process is required.
+
+Simply upload [the project files](https://github.com/chr15m/watch-later/archive/refs/heads/main.zip) to your web hosting service and access the `index.html` file.
 
 ## How It Works
 
@@ -40,9 +40,13 @@ Watch Later uses the [Nostr protocol](https://en.wikipedia.org/wiki/Nostr) to st
 Your data is encrypted with your private key (nsec), ensuring only you can access it.
 The app automatically syncs changes across all your devices without requiring any central server or account.
 
-## Self-Hosting
+## Technology
 
-To self-host, upload [all of the files](https://github.com/chr15m/watch-later/archive/refs/heads/main.zip) to your web hosting.
+- [Scittle ClojureScript](https://github.com/babashka/scittle/)
+- [Reagent](https://reagent-project.github.io/) for React-style UI
+- [Nostr Tools](https://github.com/nbd-wtf/nostr-tools) for decentralized sync
+- [YouTube Player API](https://developers.google.com/youtube/iframe_api_reference) for video playback
+- [Promesa](https://github.com/funcool/promesa) for async operations
 
 ## License
 
