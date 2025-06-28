@@ -13,11 +13,8 @@
 
 ; TODO
 ; - inconsistent use of :url and :uuid for video uniqueness
-;   (probably use url hash)
-; - work out a good set of default relays - randomize?
-; - use kind:5 to actually delete from relays
+;   (probably use url hash or youtube ID)
 ; - cache stored events and only request since last posted
-; - use a different 300xx type than the example?
 
 ; immutable constant data
 
