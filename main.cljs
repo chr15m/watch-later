@@ -709,22 +709,21 @@
 (defn component:help []
   [:section#help
    [:p
-    "Watch Later is an online app for saving a list of YouTube videos "
-    "to watch later on."]
-   [:p "Simply paste a YouTube video URL in the input above to get started."]
+    "Watch Later is an online app for saving YouTube videos to watch later."]
+   [:p "To add a video simply paste the URL in the input field above."]
    [:h2 "Your 'watch list'"]
    [:p
-    "Your list of videos is saved to servers called 'relays' on the "
+    "Your watch list is encrypted and saved to the "
     [:a {:href "https://wikipedia.org/wiki/Nostr"
-         :target "_BLANK"} "Nostr network"] "."]
+         :target "_BLANK"} "Nostr network"]
+    ", a decentralized system of servers called 'relays'."]
    [:p
     "You can access your private watch list from any device. A secret
-    'nsec' key has been created for you which secures access to your
+    'nsec key' has been created for you which secures access to your
     encrypted watch list."]
    [:p
-    "You can copy your nsec key from the settings page. "
-    "Keep a copy somewhere and you can use it to sync your list
-    to other devices."]])
+    "You can copy your 'nsec key' from the settings page. "
+    "Keep it safe - you'll need it to sync your list to other devices."]])
 
 (defn component:settings-panel [state]
   (let [sk (:sk @state)]
