@@ -110,11 +110,14 @@
                     d-identifier ":" event-template)
     (js/NostrTools.finalizeEvent event-template sk)))
 
-(defn create-settings-event [sk settings]
-  (js/console.log "create-settings-event called with settings:"
-                  (clj->js settings))
-  (let [settings-content {:settings settings}]
-    (create-finalized-event sk settings-content "settings")))
+(defn create-nip65-event [sk relays]
+  (let [tags (map #(clj->js ["r" %]) relays)
+        event-template
+        #js {:kind 10002
+             :created_at (js/Math.floor (/ (js/Date.now) 1000))
+             :tags (clj->js tags)
+             :content ""}]
+    (js/NostrTools.finalizeEvent event-template sk)))
 
 (defn publish-event [event relays]
   (js/console.log "publish-event" event relays)
@@ -125,33 +128,11 @@
 (defn publish-settings! [*state]
   (let [sk (:sk *state)
         relays (map str (:relays *state))
-        settings {:relays (when (not= (set relays) (set (map str default-relays)))
-                            relays)}
-        event (create-settings-event sk settings)]
-    (if (:relays settings)
+        event (create-nip65-event sk relays)]
+    (if (not= (set relays) (set (map str default-relays)))
       (js/localStorage.setItem localstorage-relays-key (js/JSON.stringify (clj->js relays)))
       (js/localStorage.removeItem localstorage-relays-key))
     (publish-event event relays)))
-
-(defn subscribe-to-events [*state sk relays event-callback eose-callback]
-  (let [pk (pubkey sk)
-        pool (:pool *state)
-        sub (.subscribe
-              pool
-              (clj->js relays)
-              (clj->js {:kinds [nostr-kind]
-                        :authors [pk]
-                        :#n [app-name]})
-              (clj->js {:onevent
-                        (fn [event]
-                          (let [decrypted-content
-                                (decrypt-content
-                                  sk (pubkey sk)
-                                  (.-content event))]
-                            (when decrypted-content
-                              (event-callback decrypted-content event))))
-                        :oneose eose-callback}))]
-    (assoc *state :subscription sub)))
 
 (defn encrypt-key-with-pw [sk pw]
   (try
@@ -189,27 +170,44 @@
                  (conj (or videos [])
                        (assoc decrypted-content :event event))))))))
 
-(defn update-settings! [state decrypted-content event]
-  (let [settings-payload (:settings decrypted-content)
-        event-created-at (aget event "created_at")
-        last-processed-settings-at (or (:last-settings-event-created-at @state)
-                                       0)]
+(defn process-nip65-event [state event]
+  (let [event-created-at (aget event "created_at")
+        last-processed-settings-at (or (:last-settings-event-created-at @state) 0)]
     (when (> event-created-at last-processed-settings-at)
-      (js/console.log "Processing settings event:" event decrypted-content)
-      (when (contains? settings-payload :relays)
-        (swap! state assoc :relays (or (:relays settings-payload) default-relays)))
+      (js/console.log "Processing NIP-65 event:" event)
+      (let [relays (->> (.-tags event)
+                        (filter #(= (aget % 0) "r"))
+                        (mapv #(aget % 1)))]
+        (when (seq relays)
+          (swap! state assoc :relays relays)
+          (js/localStorage.setItem localstorage-relays-key (js/JSON.stringify (clj->js relays)))))
       (swap! state assoc :last-settings-event-created-at event-created-at))))
 
-(defn event-received
-  [decrypted-content event]
-  (print "decrypted-content" decrypted-content)
-  (let [d-tag (some #(when (= (aget % 0) "d") (aget % 1))
-                    (.-tags event))]
-    ; triage settings versus video
-    (if (= d-tag (str app-name ":settings"))
-      (update-settings! state decrypted-content event)
-      (update-videos! state decrypted-content event))))
-
+(defn subscribe-to-events [*state sk relays eose-callback]
+  (let [pk (pubkey sk)
+        pool (:pool *state)
+        filters [{:kinds [nostr-kind]
+                  :authors [pk]
+                  :#n [app-name]}
+                 {:kinds [10002]
+                  :authors [pk]
+                  :limit 1}]
+        sub (.subscribeMany
+              pool
+              (clj->js relays)
+              (clj->js filters)
+              (clj->js {:onevent
+                        (fn [event]
+                          (js/console.log "event" (aget event "kind") event)
+                          (condp = (aget event "kind")
+                            nostr-kind
+                            (let [decrypted-content (decrypt-content sk pk (.-content event))]
+                              (when decrypted-content
+                                (update-videos! state decrypted-content event)))
+                            10002
+                            (process-nip65-event state event)))
+                        :oneose eose-callback}))]
+    (assoc *state :subscription sub)))
 
 (defn auto-reconnect [*state connected-count]
   (if
@@ -226,7 +224,6 @@
               (-> *state
                   (subscribe-to-events
                     sk relays
-                    #(event-received %1 %2)
                     #(swap! state assoc :eose? true))
                   (assoc :reconnect [next-idx (js/Date.now)]))))
           *state))
@@ -847,8 +844,6 @@
                    :pool pool)
                  (subscribe-to-events
                    sk (:relays @state)
-                   ; event decrypted content received
-                   #(event-received %1 %2)
                    ; eose received
                    #(swap! state assoc :eose? true))))))
   (check-url-params)
