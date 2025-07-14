@@ -19,7 +19,8 @@
 ; immutable constant data
 
 (def app-name "cx.mccormick.watchlater")
-(def default-relays ["wss://relay.damus.io"
+(def default-relays ["wss://relay.mccormick.cx"
+                     "wss://relay.damus.io"
                      "wss://nostr.wine"
                      "wss://nos.lol"])
 (def icon-url
