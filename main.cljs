@@ -443,8 +443,9 @@
                                               state sk (:uuid video) %)}})))
     100))
 
-(defn event:open-video-modal [sk video]
+(defn event:open-video-modal [sk video ev]
   (js/console.log "Opening video modal" (:url video))
+  (.preventDefault ev)
   (let [youtube-id (get-youtube-id (:url video))]
     (js/console.log "YouTube ID:" youtube-id)
     (swap! state assoc :modal-video video)
@@ -487,13 +488,13 @@
                     :metadata metadata
                     :playback playback}]
     [:div.video-item {:class (when viewed "viewed")}
-     [:div.thumbnail-container
+     [:a.thumbnail-container
+      {:on-click #(event:open-video-modal sk video-data %)
+       :href url}
       [:div.clickable-area
-       {:on-click #(event:open-video-modal sk video-data)}
        [:img.thumbnail {:src thumbnail-url :alt "Video thumbnail"}]]
       [:row-group
        [:div.video-title
-        {:on-click #(event:open-video-modal sk video-data)}
         title]
        [:div.video-controls
         [:button.icon-button
