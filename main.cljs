@@ -12,6 +12,12 @@
     [promesa.core :as p]))
 
 ; TODO
+; - generate pwa manifest dynamically, remove sw.js and manifest.
+; - show the user a QR code + pin for sync between devices.
+; - make the video URL the link on hover so you can right-click to copy
+; - use nostr-dht for a deterministic relay set
+; - pre-load video in an iframe to get total time and display it.
+
 ; - inconsistent use of :url and :uuid for video uniqueness
 ;   (probably use url hash or youtube ID)
 ; - cache stored events and only request since last posted
@@ -21,7 +27,6 @@
 (def app-name "cx.mccormick.watchlater")
 (def default-relays ["wss://relay.mccormick.cx"
                      "wss://relay.damus.io"
-                     "wss://nostr.wine"
                      "wss://nos.lol"])
 (def icon-url
   "https://cdn.jsdelivr.net/npm/@tabler/icons@3.31.0/icons/")
