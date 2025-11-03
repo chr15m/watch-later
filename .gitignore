@@ -2,4 +2,7 @@
 .conventions
 .aider*
 .opencode
-OpenCode.md
+.envrc
+.nrepl-port
+.context
+workspace
