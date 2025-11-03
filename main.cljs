@@ -14,7 +14,6 @@
 ; TODO
 ; - generate pwa manifest dynamically, remove sw.js and manifest.
 ; - show the user a QR code + pin for sync between devices.
-; - make the video URL the link on hover so you can right-click to copy
 ; - use nostr-dht for a deterministic relay set
 ; - pre-load video in an iframe to get total time and display it.
 
@@ -151,7 +150,6 @@
       (js/console.error "Failed to decrypt key" e)
       nil)))
 
-
 (defn update-videos! [state decrypted-content event]
   (swap! state update :videos
          (fn [videos]
@@ -195,10 +193,14 @@
                  {:kinds [10002]
                   :authors [pk]
                   :limit 1}]
-        sub (.subscribeMany
+        requests (mapcat
+                   (fn [relay]
+                     (map (fn [filter] {:url relay :filter filter})
+                          filters))
+                   relays)
+        sub (.subscribeMap
               pool
-              (clj->js relays)
-              (clj->js filters)
+              (clj->js requests)
               (clj->js {:onevent
                         (fn [event]
                           (js/console.log "event" (aget event "kind") event)
@@ -209,30 +211,11 @@
                                 (update-videos! state decrypted-content event)))
                             10002
                             (process-nip65-event state event)))
-                        :oneose eose-callback}))]
+                        :oneose #(eose-callback)}))]
     (assoc *state :subscription sub)))
 
-(defn auto-reconnect [*state connected-count]
-  (if
-    (> connected-count 0)
-    (assoc *state :reconnect nil)
-    (if-let [[backoff-idx last-attempt-ms] (:reconnect *state)]
-      (let [delay-s (nth resubscribe-backoff backoff-idx)]
-        (if (> (js/Date.now) (+ last-attempt-ms (* delay-s 1000)))
-          (do
-            (js/console.log "Attempting to reconnect to relays...")
-            (let [sk (:sk *state)
-                  relays (:relays *state)
-                  next-idx (min (inc backoff-idx) (dec (count resubscribe-backoff)))]
-              (-> *state
-                  (subscribe-to-events
-                    sk relays
-                    #(swap! state assoc :eose? true))
-                  (assoc :reconnect [next-idx (js/Date.now)]))))
-          *state))
-      (do
-        (js/console.log "Connection to relays lost. Scheduling reconnect.")
-        (assoc *state :reconnect [0 (js/Date.now)])))))
+(defn eose-received [*state]
+  (assoc *state :eose? true))
 
 (defn check-connected-relays! [state]
   (when-let [pool (:pool @state)]
@@ -246,8 +229,7 @@
       (swap! state
              (fn [*state]
                (-> *state
-                   (assoc :connected-relays connected-count)
-                   (auto-reconnect connected-count)))))))
+                   (assoc :connected-relays connected-count)))))))
 
 (def nostr-decode js/NostrTools.nip19.decode)
 
@@ -838,7 +820,9 @@
     (-> sk
         (pubkey)
         nostr-encode-npub))
-  (let [pool (js/NostrTools.SimplePool.)]
+  (let [pool (js/NostrTools.SimplePool.
+               #js {:enablePing true
+                    :enableReconnect true})]
     (swap! state
            (fn [*state]
              (-> *state
@@ -849,7 +833,7 @@
                  (subscribe-to-events
                    sk (:relays @state)
                    ; eose received
-                   #(swap! state assoc :eose? true))))))
+                   #(swap! state eose-received))))))
   (check-url-params)
   (js/setInterval #(check-connected-relays! state) 1000)
   (wait-for-preload)
