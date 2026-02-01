@@ -11,16 +11,6 @@
     [reagent.dom :as rdom]
     [promesa.core :as p]))
 
-; TODO
-; - generate pwa manifest dynamically, remove sw.js and manifest.
-; - show the user a QR code + pin for sync between devices.
-; - use nostr-dht for a deterministic relay set
-; - pre-load video in an iframe to get total time and display it.
-
-; - inconsistent use of :url and :uuid for video uniqueness
-;   (probably use url hash or youtube ID)
-; - cache stored events and only request since last posted
-
 ; immutable constant data
 
 (def app-name "cx.mccormick.watchlater")
