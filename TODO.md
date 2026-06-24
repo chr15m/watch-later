@@ -2,19 +2,19 @@
 
 ## TODO
 
+- [ ] Show current npub in settings
+- [ ] Bug: pressing any button opens video
+- [ ] Mobile title - shrink to fit
 - [ ] Sync code with QR to set up new device
+- [ ] Generate PWA manifest dynamically, remove sw.js and manifest.
 - [ ] Cache in localStorage, use "since" flag in fetch
-- [ ] Make colors less fruity
-- [ ] Pick deterministic relays using nostr-dht
-- [ ] Fix inconsistent use of :url and :uuid
+- [ ] Make colors match other apps
 
 ## Next
 
-
-- [ ] Bug: pressing any button opens video
-- [ ] Mobile title - shrink to fit
-- [ ] Generate PWA manifest dynamically, remove sw.js and manifest.
+- [ ] Pick deterministic relays using nostr-dht
 - [ ] Pre-load video in an iframe to get total time and display it
+- [ ] Fix inconsistent use of :url and :uuid
 
 ## Done
 
