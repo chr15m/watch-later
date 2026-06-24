@@ -554,6 +554,29 @@ row-group > * {
   border: none !important;
 }
 
+.npub-container {
+  margin-bottom: 1rem;
+}
+
+.npub-label {
+  font-size: 0.8em;
+  color: var(--shade);
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.npub-value {
+  font-family: monospace;
+  font-size: 0.85em;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  border: 1px solid var(--shade);
+  padding: 0.5rem;
+  border-radius: var(--radius);
+  background: transparent;
+}
+
 /*** loading spinner ***/
 
 .spin {

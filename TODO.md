@@ -2,7 +2,6 @@
 
 ## TODO
 
-- [ ] Show current npub in settings
 - [ ] Bug: pressing any button opens video
 - [ ] Mobile title - shrink to fit
 - [ ] Sync code with QR to set up new device
@@ -18,3 +17,4 @@
 
 ## Done
 
+- [x] Show current npub in settings
