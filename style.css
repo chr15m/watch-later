@@ -12,18 +12,10 @@
 } */
 
 :root {
-  --fg: #ffe;
-  --bg: #112;
+  --fg: #e8e4d8;
+  --bg: #161616;
   --shade: #889;
   --radius: 4px;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --fg: #112;
-    --bg: #ffe;
-    --shade: #889;
-  }
 }
 
 html {

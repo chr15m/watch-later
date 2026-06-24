@@ -6,7 +6,6 @@
 - [ ] Mobile title - shrink to fit
 - [ ] Sync code with QR to set up new device
 - [ ] Cache in localStorage, use "since" flag in fetch
-- [ ] Make colors match other apps
 
 ## Next
 
@@ -18,3 +17,4 @@
 
 - [x] Show current npub in settings
 - [x] Generate PWA manifest dynamically, remove sw.js and manifest.
+- [x] Make colors match other apps
