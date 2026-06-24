@@ -3,7 +3,6 @@
 ## TODO
 
 - [ ] Bug: pressing any button opens video
-- [ ] Mobile title - shrink to fit
 - [ ] Sync code with QR to set up new device
 - [ ] Cache in localStorage, use "since" flag in fetch
 
@@ -18,3 +17,5 @@
 - [x] Show current npub in settings
 - [x] Generate PWA manifest dynamically, remove sw.js and manifest.
 - [x] Make colors match other apps
+- [x] Mobile title - shrink to fit
+
