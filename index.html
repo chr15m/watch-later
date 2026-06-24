@@ -6,7 +6,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <link rel="manifest" href="manifest.json">
+    <script>
+      const manifest = {
+        name: "Watch Later",
+        short_name: "Watch Later",
+        description: "Simple YouTube watch list app that syncs across devices using Nostr.",
+        display: "standalone",
+        start_url: ".",
+        background_color: "#111122",
+        theme_color: "#111122",
+        icons: [
+          {
+            src: "icon.png",
+            sizes: "512x512",
+            type: "image/png"
+          }
+        ]
+      };
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = 'data:application/json;base64,' + btoa(JSON.stringify(manifest));
+      document.head.appendChild(link);
+    </script>
     <link rel="icon" href="icon.png">
     <link rel="apple-touch-icon" href="icon.png">
     <meta name="description" content="Online app to save a list of YouTube videos to watch later.">
@@ -40,9 +61,6 @@
     </script>
     <script src="https://www.youtube.com/iframe_api"></script>
     <script type="application/x-scittle" src="https://cdn.jsdelivr.net/gh/chr15m/scittle-iconloader/iconloader.cljs"></script>
-    <script>
-      if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
-    </script>
     <script type="application/x-scittle" src="main.cljs"></script>
   </head>
   <body>
