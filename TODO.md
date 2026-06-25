@@ -2,7 +2,6 @@
 
 ## TODO
 
-- [ ] Bug: pressing any button opens video
 - [ ] Sync code with QR to set up new device
 - [ ] Cache in localStorage, use "since" flag in fetch
 
@@ -18,4 +17,5 @@
 - [x] Generate PWA manifest dynamically, remove sw.js and manifest.
 - [x] Make colors match other apps
 - [x] Mobile title - shrink to fit
+- [x] Bug: pressing any button opens video
 

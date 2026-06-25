@@ -464,24 +464,26 @@
       {:on-click #(event:open-video-modal sk video-data %)
        :href url}
       [:div.clickable-area
-       [:img.thumbnail {:src thumbnail-url :alt "Video thumbnail"}]]
-      [:row-group
-       [:div.video-title
-        title]
-       [:div.video-controls
-        [:button.icon-button
-         {:on-click #(toggle-viewed! state sk video-data)
-          :alt (if viewed "Viewed" "Mark as viewed")}
-         (if (= (:loading? @state) uuid)
-           [component:loading-spinner {:data-size "small"}]
-           [icon
-            (if viewed
-              (load-icon "filled/eye.svg")
-              (load-icon "outline/eye.svg"))])]
-        [:button.icon-button
-         {:on-click #(event:delete-video! state sk video-data)
-          :alt "Delete video"}
-         [icon (load-icon "outline/trash.svg")]]]]]]))
+       [:img.thumbnail {:src thumbnail-url :alt "Video thumbnail"}]]]
+     [:row-group
+      [:a.video-title
+       {:on-click #(event:open-video-modal sk video-data %)
+        :href url}
+       title]
+      [:div.video-controls
+       [:button.icon-button
+        {:on-click #(toggle-viewed! state sk video-data)
+         :alt (if viewed "Viewed" "Mark as viewed")}
+        (if (= (:loading? @state) uuid)
+          [component:loading-spinner {:data-size "small"}]
+          [icon
+           (if viewed
+             (load-icon "filled/eye.svg")
+             (load-icon "outline/eye.svg"))])]
+       [:button.icon-button
+        {:on-click #(event:delete-video! state sk video-data)
+         :alt "Delete video"}
+        [icon (load-icon "outline/trash.svg")]]]]]))
 
 (defn event:pasted-url [state input-value ev]
   (let [pasted-text (.. ev -clipboardData (getData "text"))]
