@@ -5,4 +5,5 @@
 .envrc
 .nrepl-port
 .context
+.kbtd-*-data
 workspace
