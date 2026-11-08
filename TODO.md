@@ -2,17 +2,24 @@
 
 ## TODO
 
-- [ ] Sync code with QR to set up new device
-- [ ] Cache in localStorage, use "since" flag in fetch
+- [ ] Cache locally and use "since" flag in fetch.
+- [ ] Bug: Make client authoritative if e.g. 'watched' button pressed.
+- [ ] Ability to add by URL with bookmarklet (`SPEC-add-url.md`).
+- [ ] Get QR auth sync working.
+- [ ] Relay management:
+  - [ ] Highlight non-connected relays in warning color in the settings page.
+  - [ ] Track relay publish/connect error counts.
+  - [ ] Suggest refreshing any relay which has gone bad.
+  - [ ] Pick deterministic relays using pretty-good-relays library.
 
 ## Next
 
-- [ ] Pick deterministic relays using nostr-dht
 - [ ] Pre-load video in an iframe to get total time and display it
 - [ ] Fix inconsistent use of :url and :uuid
 
 ## Done
 
+- [x] Top right corner close button hides interface during video playback.
 - [x] Show current npub in settings
 - [x] Generate PWA manifest dynamically, remove sw.js and manifest.
 - [x] Make colors match other apps
