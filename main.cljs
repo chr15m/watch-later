@@ -664,68 +664,10 @@
           (js/alert "Invalid key format")
           (reset! decrypting-atom false))))))
 
-(defn component:settings-nsec []
-  (let [password (r/atom "")
-        encrypting? (r/atom false)
-        decrypting? (r/atom false)]
-    (fn [sk]
-      (let [npub (nostr-encode-npub (pubkey sk))]
-        [:div.setting-group
-         [:h3 "Account"]
-         [:div.npub-container
-          [:div.npub-value {:title npub} npub]]
-         [:p "Your nsec is the key to access your account."]
-         [:p
-          "You can sync your watch list to another device,
-          or back it up, by copying and saving your nsec key."]
-         [:row-group
-          [:input {:type "password"
-                   :autocomplete "off"
-                   :placeholder
-                   "(Optional) Enter a password to encrypt your nsec key."
-                   :value @password
-                   :on-change #(reset! password (.. % -target -value))}]
-          [:button.button
-           {:disabled @encrypting?
-            :on-click #(do
-                         (reset! encrypting? true)
-                         (js/setTimeout
-                           (fn []
-                             (p/let [result (if (seq @password)
-                                              (encrypt-key-with-pw sk @password)
-                                              (nostr-encode-nsec sk))]
-                               (js/console.log "encrypted" result)
-                               (copy-to-clipboard result)
-                               (js/alert (str (if (seq @password)
-                                                "ncrypt"
-                                                "nsec")
-                                              " copied to clipboard!"))
-                               (reset! password "")
-                               (reset! encrypting? false))) 1))}
-
-           (if @encrypting?
-             [component:loading-spinner {:data-size "small"}]
-             "Copy")]]
-         [:p
-          "Restore a watch list or sync with a different device
-          by pasting the nsec here:"]
-         [:div
-          (if @decrypting?
-            [component:loading-spinner {:data-size "small"}]
-            [:input {:autocomplete "off"
-                     :value ""
-                     :placeholder
-                     (str
-                       "Paste nsec/ncrypt here "
-                       "to sync up another device.")
-                     :on-paste (partial event:paste-nsec decrypting?)}])]]))))
-
 (defn component:settings-sync [state]
   (let [sk (:sk @state)
         qr-sync (:qr-sync @state)]
-    [:div.setting-group
-     [:h3 "Sync to Device"]
-     [:p "You can sync your watch list to another device by scanning a QR code."]
+    [:<>
      (when qr-sync
        [:div.modal-overlay
         {:on-click #(when (= (.-target %) (.-currentTarget %))
@@ -752,9 +694,11 @@
            [icon (if (:reveal-secret? qr-sync)
                    (load-icon "outline/eye-off.svg")
                    (load-icon "outline/eye.svg"))]]]]])
-     [:div
-      [:button.button
-       {:on-click
+     [:p
+      [:button.icon-button
+       {:title "Show Sync QR Code"
+        :alt "Show Sync QR Code"
+        :on-click
         #(let [secret (generate-random-hex)
                relay (get-bootstrap-relay state)
                clean-relay (.replace relay (js/RegExp. "^wss?:\\/\\/" "i") "")]
@@ -782,7 +726,70 @@
                                                     :correctLevel (.. js/QRCode -CorrectLevel -M)})
                          (swap! state update :qr-sync assoc :qr-loading? false))))
                    100)))))}
-       "Generate Transfer Code"]]]))
+       [icon (load-icon "outline/qrcode.svg")]]
+      " Scan QR to sync your key and watch list to your phone or another device."]]))
+
+(defn component:settings-nsec [_state]
+  (let [password (r/atom "")
+        encrypting? (r/atom false)
+        decrypting? (r/atom false)]
+    (fn [state]
+      (let [sk (:sk @state)
+            npub (nostr-encode-npub (pubkey sk))]
+        [:div.setting-group
+         [:h3 "Account"]
+         [:div.npub-container
+          [:div.npub-value {:title npub} npub]]
+         [:h4 "QR Sync"]
+         [component:settings-sync state]
+         [:h4 "Secret Key"]
+         [:p "Your nsec is the key to access your account."]
+         [:p
+          "You can sync your watch list to another device,
+          or back it up, by copying and saving your nsec key."]
+         [:row-group
+          [:input {:type "password"
+                   :autocomplete "off"
+                   :placeholder
+                   "(Optional) Enter a password to encrypt your nsec key."
+                   :value @password
+                   :on-change #(reset! password (.. % -target -value))}]
+          [:button.button
+           {:disabled @encrypting?
+            :title "Copy key"
+            :alt "Copy key"
+            :on-click #(do
+                         (reset! encrypting? true)
+                         (js/setTimeout
+                           (fn []
+                             (p/let [result (if (seq @password)
+                                              (encrypt-key-with-pw sk @password)
+                                              (nostr-encode-nsec sk))]
+                               (js/console.log "encrypted" result)
+                               (copy-to-clipboard result)
+                               (js/alert (str (if (seq @password)
+                                                "ncrypt"
+                                                "nsec")
+                                              " copied to clipboard!"))
+                               (reset! password "")
+                               (reset! encrypting? false))) 1))}
+
+           (if @encrypting?
+             [component:loading-spinner {:data-size "small"}]
+             [icon (load-icon "outline/copy.svg")])]]
+         [:p
+          "Restore a watch list or sync with a different device
+          by pasting the nsec here:"]
+         [:div
+          (if @decrypting?
+            [component:loading-spinner {:data-size "small"}]
+            [:input {:autocomplete "off"
+                     :value ""
+                     :placeholder
+                     (str
+                       "Paste nsec/ncrypt here "
+                       "to sync up another device.")
+                     :on-paste (partial event:paste-nsec decrypting?)}])]]))))
 
 (defn component:help []
   [:section#help
@@ -926,14 +933,12 @@
                 [icon (load-icon "outline/check.svg")])]]]])))))
 
 (defn component:settings-panel [state]
-  (let [sk (:sk @state)]
-    [:div.settings-panel
-     [:h2 "Settings"]
-     [component:settings-sync state]
-     [component:settings-nsec sk]
-     [component:settings-relays state]
-     [:h1 "About"]
-     [component:help]]))
+  [:div.settings-panel
+   [:h2 "Settings"]
+   [component:settings-nsec state]
+   [component:settings-relays state]
+   [:h1 "About"]
+   [component:help]])
 
 (defn component:header [state]
   [:header
