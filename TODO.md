@@ -5,7 +5,6 @@
 - [ ] Cache locally and use "since" flag in fetch.
 - [ ] Bug: Make client authoritative if e.g. 'watched' button pressed.
 - [ ] Ability to add by URL with bookmarklet (`SPEC-add-url.md`).
-- [ ] Get QR auth sync working.
 - [ ] Relay management:
   - [ ] Highlight non-connected relays in warning color in the settings page.
   - [ ] Track relay publish/connect error counts.
@@ -19,6 +18,7 @@
 
 ## Done
 
+- [x] Get QR auth sync working.
 - [x] Top right corner close button hides interface during video playback.
 - [x] Show current npub in settings
 - [x] Generate PWA manifest dynamically, remove sw.js and manifest.

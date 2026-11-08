@@ -46,9 +46,10 @@
                         :last-settings-event-created-at nil
                         :pool nil
                         :connected-relays 0
-                        :reconnect nil}))
+                        :reconnect nil
+                        :transfer-mode nil}))
 
-;*** nostr functions ***;
+;*** Nostr functions ***;
 
 (defn pubkey [sk]
   (js/NostrTools.getPublicKey sk))
@@ -66,7 +67,7 @@
                        (and sk
                             (= (aget sk "type") "nsec")
                             (aget sk "data")))
-                        (catch :default _e nil))]
+                     (catch :default _e nil))]
     (if decoded-sk
       ; [sk generated?]
       [decoded-sk false]
@@ -276,6 +277,60 @@
     (.select el)
     (.execCommand js/document "copy")
     (.removeChild (.-body js/document) el)))
+
+(defn generate-random-hex []
+  (let [arr (js/Uint8Array. 8)]
+    (js/crypto.getRandomValues arr)
+    (let [hex-str (->> (js/Array.from arr)
+                       (map (fn [x]
+                              (let [s (.toString x 16)]
+                                (if (= (.-length s) 1)
+                                  (str "0" s)
+                                  s))))
+                       (apply str))]
+      (str (.substr hex-str 0 4) "-"
+           (.substr hex-str 4 4) "-"
+           (.substr hex-str 8 4) "-"
+           (.substr hex-str 12 4)))))
+
+(defn format-secret [clean-str]
+  (let [len (.-length clean-str)]
+    (cond
+      (<= len 4) clean-str
+      (<= len 8) (str (.substr clean-str 0 4) "-" (.substr clean-str 4))
+      (<= len 12) (str (.substr clean-str 0 4) "-" (.substr clean-str 4 4) "-" (.substr clean-str 8))
+      :else (str (.substr clean-str 0 4) "-" (.substr clean-str 4 4) "-" (.substr clean-str 8 4) "-" (.substr clean-str 12)))))
+
+(defn get-bootstrap-relay [state]
+  (let [pool (:pool @state)
+        statuses (when pool (.listConnectionStatus pool))
+        connected (when statuses
+                    (->> (js/Array.from statuses)
+                         (js->clj)
+                         (filter (fn [[_ v]] (true? v)))
+                         (map first)))]
+    (or (first connected)
+        (first (:relays @state))
+        (first default-relays))))
+
+(defn check-url-hash [state]
+  (let [hash js/window.location.hash]
+    (when (and hash (zero? (.indexOf hash "#xfr=")))
+      (try
+        (let [decoded-payload (js/atob (.substring hash 5))
+              last-dash (.lastIndexOf decoded-payload "-")]
+          (when (not= last-dash -1)
+            (let [raw-relay (.substring decoded-payload 0 last-dash)
+                  relay (if (.match raw-relay (js/RegExp. "^wss?:\\/\\/" "i"))
+                          raw-relay
+                          (str "wss://" raw-relay))
+                  ncryptsec (.substring decoded-payload (inc last-dash))]
+              (swap! state assoc :transfer-mode {:relay relay :ncryptsec ncryptsec})
+              (.replaceState js/window.history nil ""
+                             (str (.-pathname js/window.location)
+                                  (.-search js/window.location))))))
+        (catch :default e
+          (js/console.error "Failed to decode transfer hash" e))))))
 
 (defn check-url-params []
   (let [url-params (js/URLSearchParams. (.-search js/window.location))
@@ -650,39 +705,73 @@
                        "to sync up another device.")
                      :on-paste (partial event:paste-nsec decrypting?)}])]]))))
 
-(defn component:settings-sync [_state nsec pin-input show-qr]
-  [:div.setting-group
-   [:h3 "Sync to Device"]
-   [:p "You can sync your watch list to another device by scanning a QR code, or
-       copying and pasting the nsec."]
-   (if @show-qr
-     [:div
-      [:div#qrcode]
-      [:button.button {:on-click
-                       #(reset! show-qr false)}
-       "Hide QR Code"]]
-     [:div
-      [:input {:type "password"
-               :autocomplete "off"
-               :placeholder "Enter a PIN to encrypt the transfer"
-               :value @pin-input
-               :on-change #(reset! pin-input (.. % -target -value))}]
-      [:button.button
-       {:on-click #(when (and @pin-input (not= @pin-input ""))
-                     (p/let [encrypted-key
-                             (encrypt-key-with-pw nsec @pin-input)]
-                       (when encrypted-key
-                         (let [url (str (.-origin js/window.location)
-                                        (.-pathname js/window.location)
-                                        "?key=" encrypted-key)]
-                           (reset! show-qr true)
-                           (js/setTimeout
-                             (fn []
-                               (js/QRCode. "qrcode" #js {:text url
-                                                         :width 256
-                                                         :height 256}))
-                             100)))))}
-       "Generate QR Code"]])])
+(defn component:settings-sync [_state]
+  (let [show-qr (r/atom false)
+        qr-loading? (r/atom true)
+        secret-code (r/atom "")
+        reveal-secret? (r/atom false)]
+    (fn [state]
+      (let [sk (:sk @state)]
+        [:div.setting-group
+         [:h3 "Sync to Device"]
+         [:p "You can sync your watch list to another device by scanning a QR code."]
+         (when @show-qr
+           [:div.modal-overlay
+            {:on-click #(when (= (.-target %) (.-currentTarget %))
+                          (reset! show-qr false)
+                          (reset! secret-code "")
+                          (reset! reveal-secret? false))}
+            [:div.dialog-content.centered
+             [:button.dialog-close
+              {:on-click #(do
+                            (reset! show-qr false)
+                            (reset! secret-code "")
+                            (reset! reveal-secret? false))
+               :alt "Close"}
+              [icon (load-icon "outline/x.svg")]]
+             [:p "Scan QR to sync new device."]
+             (if @qr-loading?
+               [component:loading-spinner]
+               nil)
+             [:div#qrcode {:style {:display (if @qr-loading? "none" "inline-block")}}]
+             [:div.password-container
+              [:div "Password:"]
+              [:span.password-display
+               (if @reveal-secret? @secret-code "••••-••••-••••-••••")]
+              [:button.icon-button
+               {:on-click #(swap! reveal-secret? not)
+                :alt "Toggle secret visibility"}
+               [icon (if @reveal-secret?
+                       (load-icon "outline/eye-off.svg")
+                       (load-icon "outline/eye.svg"))]]]]])
+         [:div
+          [:button.button
+           {:on-click
+            #(let [secret (generate-random-hex)
+                   relay (get-bootstrap-relay state)
+                   clean-relay (.replace relay (js/RegExp. "^wss?:\\/\\/" "i") "")]
+               (reset! secret-code secret)
+               (reset! qr-loading? true)
+               (p/let [ncryptsec (encrypt-key-with-pw sk secret)]
+                 (when ncryptsec
+                   (let [raw-payload (str clean-relay "-" ncryptsec)
+                         payload (js/btoa raw-payload)
+                         url (str (.-origin js/window.location)
+                                  (.-pathname js/window.location)
+                                  "#xfr=" payload)]
+                     (js/console.log "Generating QR Code with URL:" url)
+                     (reset! show-qr true)
+                     (js/setTimeout
+                       (fn []
+                         (let [container (.getElementById js/document "qrcode")]
+                           (set! (.-innerHTML container) "")
+                           (js/QRCode. container #js {:text url
+                                                      :width 512
+                                                      :height 512
+                                                      :correctLevel (.. js/QRCode -CorrectLevel -M)})
+                           (reset! qr-loading? false)))
+                       100)))))}
+           "Generate Transfer Code"]]]))))
 
 (defn component:help []
   [:section#help
@@ -703,11 +792,120 @@
     "You can copy your 'nsec key' from the settings page. "
     "Keep it safe - you'll need it to sync your list to other devices."]])
 
+(defn component:transfer-modal [_state]
+  (let [input-val (r/atom "")
+        error-msg (r/atom nil)
+        decrypting? (r/atom false)]
+    (fn [state]
+      (when-let [xfer (:transfer-mode @state)]
+        (let [relay (:relay xfer)
+              ncryptsec (:ncryptsec xfer)
+              hex-chars ["1" "2" "3" "a"
+                         "4" "5" "6" "b"
+                         "7" "8" "9" "c"
+                         "d" "0" "e" "f"]
+              append-char (fn [c]
+                            (let [current @input-val
+                                  clean (.replace current (js/RegExp. "-" "g") "")
+                                  len (.-length clean)]
+                              (when (< len 16)
+                                (let [new-clean (str clean c)
+                                      formatted (format-secret new-clean)]
+                                  (reset! input-val formatted)))))
+              backspace (fn []
+                          (let [current @input-val
+                                clean (.replace current (js/RegExp. "-" "g") "")
+                                len (.-length clean)]
+                            (when (> len 0)
+                              (let [new-clean (.substring clean 0 (dec len))
+                                    formatted (format-secret new-clean)]
+                                (reset! input-val formatted)))))
+              handle-submit (fn []
+                              (reset! error-msg nil)
+                              (reset! decrypting? true)
+                              (js/setTimeout
+                                (fn []
+                                  (let [secret @input-val
+                                        decrypted (decrypt-key-with-pw ncryptsec secret)]
+                                    (if decrypted
+                                      (let [local-videos (:videos @state)
+                                            has-videos? (seq local-videos)
+                                            save-and-reload (fn []
+                                                              (set-key decrypted)
+                                                              (let [current-relays (:relays @state)
+                                                                    new-relays (if (some #(= % relay) current-relays)
+                                                                                 current-relays
+                                                                                 (conj current-relays relay))]
+                                                                (js/localStorage.setItem localstorage-relays-key (js/JSON.stringify (clj->js new-relays))))
+                                                              (js/window.location.reload))]
+                                        (if (not has-videos?)
+                                          (save-and-reload)
+                                          (let [old-nsec (nostr-encode-nsec (:sk @state))
+                                                msg (str "Are you sure you want to replace your existing key?\n\n"
+                                                         "Your current key: " old-nsec "\n"
+                                                         "Saved videos: " (count local-videos) "\n\n"
+                                                         "This will overwrite your local key and load the new watch list.")]
+                                            (if (js/confirm msg)
+                                              (save-and-reload)
+                                              (reset! decrypting? false)))))
+                                      (do
+                                        (reset! error-msg "Failed to decrypt. Please check the password.")
+                                        (reset! decrypting? false)))))
+                                100))]
+          [:div.modal-overlay
+           [:div.dialog-content
+            [:button.dialog-close
+             {:on-click #(swap! state assoc :transfer-mode nil)
+              :disabled @decrypting?
+              :alt "Close"}
+             [icon (load-icon "outline/x.svg")]]
+            [:p "Sync watch list"]
+            (when relay
+              [:div.transfer-relay {:title relay} relay])
+            [:p "Enter code:"]
+            [:input.password-input
+             {:type "text"
+              :placeholder "••••-••••-••••-••••"
+              :value @input-val
+              :on-change (fn [ev]
+                           (let [v (.. ev -target -value)
+                                 clean (.replace v (js/RegExp. "[^0-9a-fA-F]" "g") "")
+                                 lower (.toLowerCase clean)
+                                 truncated (if (> (.-length lower) 16) (.substring lower 0 16) lower)
+                                 formatted (format-secret truncated)]
+                             (reset! input-val formatted)))}]
+            [:div.hex-keyboard
+             (for [c hex-chars]
+               ^{:key c}
+               [:button.button.hex-key {:on-click #(append-char c)} c])
+             [:button.button.hex-key-double
+              {:on-click #(reset! input-val "") :title "Clear"}
+              [icon (load-icon "outline/trash.svg")]]
+             [:button.button.hex-key-double
+              {:on-click backspace :title "Backspace"}
+              [icon (load-icon "outline/backspace.svg")]]]
+            (when @error-msg
+              [:div.error.error-container @error-msg])
+            [:row-group.modal-actions
+             [:button.button
+              {:on-click #(swap! state assoc :transfer-mode nil)
+               :disabled @decrypting?
+               :title "Cancel"}
+              [icon (load-icon "outline/x.svg")]]
+             [:button.button
+              {:on-click handle-submit
+               :disabled (or @decrypting?
+                             (not= (.-length (.replace @input-val (js/RegExp. "-" "g") "")) 16))
+               :title "Import"}
+              (if @decrypting?
+                [component:loading-spinner {:data-size "small"}]
+                [icon (load-icon "outline/check.svg")])]]]])))))
+
 (defn component:settings-panel [state]
   (let [sk (:sk @state)]
     [:div.settings-panel
      [:h2 "Settings"]
-     #_ [component:settings-sync state nsec (r/atom "") (r/atom false)]
+     [component:settings-sync state]
      [component:settings-nsec sk]
      [component:settings-relays state]
      [:h1 "About"]
@@ -767,9 +965,9 @@
      [component:tabs state])
 
    (if (or (:loading? @state)
-             (and
-               (nil? (:eose? @state))
-               (not (:generated? @state))))
+           (and
+             (nil? (:eose? @state))
+             (not (:generated? @state))))
      [component:loading-spinner]
      (when (empty? (:videos @state))
        [component:help]))
@@ -803,7 +1001,8 @@
       [component:settings-panel state]
       [component:main-view state])]
    [component:footer state]
-   [component:video-modal]])
+   [component:video-modal]
+   [component:transfer-modal state]])
 
 ;*** launch ***;
 
@@ -830,6 +1029,7 @@
                    ; eose received
                    #(swap! state eose-received))))))
   (check-url-params)
+  (check-url-hash state)
   (js/setInterval #(check-connected-relays! state) 1000)
   (wait-for-preload)
   (rdom/render [app state] (.getElementById js/document "app")))

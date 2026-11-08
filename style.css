@@ -546,6 +546,15 @@ row-group > * {
   border: none !important;
 }
 
+#qrcode img, #qrcode canvas {
+  max-width: 100% !important;
+  max-height: 40vh !important;
+  width: auto !important;
+  height: auto !important;
+  display: block;
+  margin: 0 auto;
+}
+
 .npub-container {
   margin-bottom: 1rem;
 }
@@ -638,4 +647,110 @@ row-group > * {
   header {
     padding: 0px !important;
   }
+}
+
+/* Sync & Transfer Modal Styles */
+.dialog-content {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  height: auto;
+  padding: 1em;
+  background: var(--bg);
+  border: 1px solid var(--fg);
+  border-radius: var(--radius);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.dialog-content p {
+  margin: 0.4rem 0;
+}
+
+.dialog-content input {
+  margin-bottom: 0.4rem;
+}
+
+.dialog-content.centered {
+  text-align: center;
+}
+
+.dialog-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: transparent !important;
+  border: none !important;
+  color: var(--fg) !important;
+  cursor: pointer;
+  padding: 0.4rem;
+  margin: 0;
+}
+
+.dialog-close:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.transfer-relay {
+  font-size: 0.85em;
+  color: var(--shade);
+  margin-bottom: 0.4rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#qrcode {
+  margin: 0.5em 0;
+  background: white;
+  padding: 0.5em;
+  max-width: 512px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.password-container {
+  margin-bottom: 0.5em;
+}
+
+.password-display {
+  font-family: monospace;
+  font-weight: bold;
+  margin-right: 0.5em;
+  white-space: nowrap;
+}
+
+.password-input {
+  text-align: center;
+  font-family: monospace;
+  font-size: 1.2em;
+  letter-spacing: 2px;
+}
+
+.hex-keyboard {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.4em;
+  margin: 0.5em 0;
+}
+
+.hex-key {
+  font-family: monospace;
+  font-size: 1.1em;
+  padding: 0.4em;
+}
+
+.hex-key-double {
+  grid-column: span 2;
+  font-size: 0.9em;
+}
+
+.error-container {
+  margin-bottom: 0.5em;
+}
+
+.modal-actions {
+  justify-content: space-between;
+  margin-top: 0.5em;
 }
