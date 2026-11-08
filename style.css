@@ -710,6 +710,14 @@ row-group > * {
   box-sizing: border-box;
 }
 
+#qrcode.black {
+  background: black;
+}
+
+#qrcode.black img, #qrcode.black canvas {
+  visibility: hidden;
+}
+
 .password-container {
   margin-bottom: 0.5em;
 }

@@ -681,7 +681,8 @@
          (if (:qr-loading? qr-sync)
            [component:loading-spinner]
            nil)
-         [:div#qrcode {:style {:display (if (:qr-loading? qr-sync) "none" "inline-block")}}]
+         [:div#qrcode {:class (when (:reveal-secret? qr-sync) "black")
+                       :style {:display (if (:qr-loading? qr-sync) "none" "inline-block")}}]
          [:div.password-container
           [:div "Password:"]
           [:span.password-display
