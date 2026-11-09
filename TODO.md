@@ -2,14 +2,15 @@
 
 ## TODO
 
-- [ ] Cache locally and use "since" flag in fetch.
-- [ ] Bug: Make client authoritative if e.g. 'watched' button pressed.
+- [ ] Cache locally and use "since" flag in fetch (`SPEC-event-cache-since-flag`).
 - [ ] Ability to add by URL with bookmarklet (`SPEC-add-url.md`).
+- [ ] Add a 'logout' button to settings which completely purges the nsec and cached data.
 - [ ] Relay management:
   - [x] Highlight non-connected relays in warning color in the settings page.
   - [ ] Track relay publish/connect error counts.
   - [ ] Suggest refreshing any relay which has gone bad.
   - [ ] Pick deterministic relays using pretty-good-relays library.
+- [ ] Bug: Make client authoritative if e.g. 'watched' button pressed. (re-check)
 
 ## Next
 
