@@ -606,9 +606,9 @@
      (for [[idx relay] (map-indexed vector (:relays @state))]
        (let [connected? (contains? connected-relays (normalize-relay-url relay))]
          ^{:key idx}
-         [:row-group
+         [:row-group.relay-row
+          {:class (when-not connected? "relay-disconnected")}
           [:input {:type "text"
-                   :class (when-not connected? "relay-disconnected")
                    :title (if connected? "Connected" "Disconnected")
                    :value relay
                    :on-change #(swap! state assoc-in
@@ -616,20 +616,22 @@
                                       (.. % -target -value))
                    :on-blur #(publish-settings! @state)}]
           [:button.icon-button
-       {:on-click #(when
-                     (js/confirm "Delete this relay?")
-                     (swap! state update :relays
-                            (fn [relays]
-                              (vec (concat
-                                     (subvec relays 0 idx)
-                                     (subvec relays (inc idx))))))
-                     (publish-settings! @state))
-        :alt "Delete relay"}
-       [icon (load-icon "outline/trash.svg")]]])))
-   [:button.button
-    {:on-click #(swap! state update :relays conj "wss://")}
-    [icon (load-icon "outline/plus.svg")]
-    " Add relay"]])
+           {:on-click #(when
+                         (js/confirm "Delete this relay?")
+                         (swap! state update :relays
+                                (fn [relays]
+                                  (vec (concat
+                                         (subvec relays 0 idx)
+                                         (subvec relays (inc idx))))))
+                         (publish-settings! @state))
+            :alt "Delete relay"}
+           [icon (load-icon "outline/trash.svg")]]])))
+   [:div.relay-add-row
+    [:button.icon-button
+     {:on-click #(swap! state update :relays conj "wss://")
+      :title "Add relay"
+      :alt "Add relay"}
+     [icon (load-icon "outline/plus.svg")]]]])
 
 (defn event:paste-nsec [decrypting-atom ev]
   (let [pasted-text (.. ev -clipboardData (getData "text"))]

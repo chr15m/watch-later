@@ -485,9 +485,24 @@ row-group > * {
   border-bottom: 1px solid var(--fg);
 }
 
-input.relay-disconnected {
+.relay-row {
+  margin-bottom: 0.5em;
+}
+
+.relay-row.relay-disconnected input {
   color: var(--shade);
   border-color: var(--shade);
+}
+
+.relay-row.relay-disconnected button.icon-button {
+  background: var(--shade);
+  border-color: var(--shade);
+}
+
+.relay-add-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5em;
 }
 
 /* Modal styles */
