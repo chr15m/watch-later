@@ -6,7 +6,7 @@
 - [ ] Bug: Make client authoritative if e.g. 'watched' button pressed.
 - [ ] Ability to add by URL with bookmarklet (`SPEC-add-url.md`).
 - [ ] Relay management:
-  - [ ] Highlight non-connected relays in warning color in the settings page.
+  - [x] Highlight non-connected relays in warning color in the settings page.
   - [ ] Track relay publish/connect error counts.
   - [ ] Suggest refreshing any relay which has gone bad.
   - [ ] Pick deterministic relays using pretty-good-relays library.

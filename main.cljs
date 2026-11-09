@@ -46,7 +46,7 @@
                         :active-tab :unwatched
                         :last-settings-event-created-at nil
                         :pool nil
-                        :connected-relays 0
+                        :connected-relays #{}
                         :reconnect nil
                         :transfer-mode nil
                         :qr-sync nil}))
@@ -219,19 +219,26 @@
 (defn eose-received [*state]
   (assoc *state :eose? true))
 
+(defn normalize-relay-url [url]
+  (when (seq url)
+    (let [s (.trim (str url))
+          with-proto (if (.match s (js/RegExp. "^wss?:\\/\\/" "i"))
+                       s
+                       (str "wss://" s))]
+      (-> with-proto
+          (.toLowerCase)
+          (.replace (js/RegExp. "/+$") "")))))
+
 (defn check-connected-relays! [state]
   (when-let [pool (:pool @state)]
     (let [statuses (.listConnectionStatus pool)
-          connected-count (->> statuses
-                               js/Object.fromEntries
-                               (js->clj)
-                               (vals)
-                               (filter true?)
-                               count)]
-      (swap! state
-             (fn [*state]
-               (-> *state
-                   (assoc :connected-relays connected-count)))))))
+          connected-set (->> (js/Array.from statuses)
+                             (js->clj)
+                             (filter (fn [[_ v]] (true? v)))
+                             (map first)
+                             (map normalize-relay-url)
+                             set)]
+      (swap! state assoc :connected-relays connected-set))))
 
 (def nostr-decode js/NostrTools.nip19.decode)
 
@@ -595,16 +602,20 @@
    [:p
     "Set the Nostr relays you'd like to use "
     "to sync and store your watch list."]
-   (for [[idx relay] (map-indexed vector (:relays @state))]
-     ^{:key idx}
-     [:row-group
-      [:input {:type "text"
-               :value relay
-               :on-change #(swap! state assoc-in
-                                  [:relays idx]
-                                  (.. % -target -value))
-               :on-blur #(publish-settings! @state)}]
-      [:button.icon-button
+   (let [connected-relays (or (:connected-relays @state) #{})]
+     (for [[idx relay] (map-indexed vector (:relays @state))]
+       (let [connected? (contains? connected-relays (normalize-relay-url relay))]
+         ^{:key idx}
+         [:row-group
+          [:input {:type "text"
+                   :class (when-not connected? "relay-disconnected")
+                   :title (if connected? "Connected" "Disconnected")
+                   :value relay
+                   :on-change #(swap! state assoc-in
+                                      [:relays idx]
+                                      (.. % -target -value))
+                   :on-blur #(publish-settings! @state)}]
+          [:button.icon-button
        {:on-click #(when
                      (js/confirm "Delete this relay?")
                      (swap! state update :relays
@@ -614,7 +625,7 @@
                                      (subvec relays (inc idx))))))
                      (publish-settings! @state))
         :alt "Delete relay"}
-       [icon (load-icon "outline/trash.svg")]]])
+       [icon (load-icon "outline/trash.svg")]]])))
    [:button.button
     {:on-click #(swap! state update :relays conj "wss://")}
     [icon (load-icon "outline/plus.svg")]
@@ -948,7 +959,7 @@
      [icon (load-icon "filled/brand-youtube.svg")]
      "Watch Later"]
     [:div {:style {:display "flex" :align-items "center" :gap "8px"}}
-     (let [connected-count (:connected-relays @state)
+     (let [connected-count (count (:connected-relays @state))
            total-relays (count (:relays @state))]
        [:span (str connected-count "/" total-relays)])
      [:button.icon-button

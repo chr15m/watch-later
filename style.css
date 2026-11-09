@@ -485,6 +485,11 @@ row-group > * {
   border-bottom: 1px solid var(--fg);
 }
 
+input.relay-disconnected {
+  color: var(--shade);
+  border-color: var(--shade);
+}
+
 /* Modal styles */
 .modal-overlay {
   position: fixed !important;
