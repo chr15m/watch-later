@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <script>
       const manifest = {
         name: "Watch Later",
@@ -17,7 +18,7 @@
         theme_color: "#161616",
         icons: [
           {
-            src: "icon.png",
+            src: new URL("icon.png", window.location.href).href,
             sizes: "512x512",
             type: "image/png"
           }

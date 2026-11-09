@@ -18,6 +18,7 @@
 
 ## Done
 
+- [x] Bug: add-to-homescreen on Firefox does not create a full screen "app".
 - [x] Get QR auth sync working.
 - [x] Top right corner close button hides interface during video playback.
 - [x] Show current npub in settings
